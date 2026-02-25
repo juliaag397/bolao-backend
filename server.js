@@ -34,27 +34,22 @@ app.post("/cadastro", async (req, res) => {
   const { nome, email, senha } = req.body;
 
   try {
-    // Verifica se já existe email no banco
-    const usuarioExistente = await pool.query(
-      "SELECT * FROM usuarios WHERE email = $1",
-      [email]
-    );
-
-    if (usuarioExistente.rows.length > 0) {
-      return res.json({ erro: "E-mail já cadastrado!" });
-    }
-
-    // Insere usuário no banco
     await pool.query(
       "INSERT INTO usuarios (nome, email, senha) VALUES ($1, $2, $3)",
       [nome, email, senha]
     );
 
-    res.json({ mensagem: "Cadastro realizado com sucesso!" });
+    return res.json({ mensagem: "Cadastro realizado com sucesso!" });
 
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ erro: "Erro no servidor" });
+    console.error("Erro real:", error);
+
+    // 🔥 Se for email duplicado (PostgreSQL)
+    if (error.code === "23505") {
+      return res.status(400).json({ erro: "E-mail já cadastrado!" });
+    }
+
+    return res.status(500).json({ erro: "Erro no servidor" });
   }
 });
 
