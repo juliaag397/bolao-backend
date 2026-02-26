@@ -2,6 +2,9 @@ console.log("PGUSER:", process.env.PGUSER);
 console.log("PGHOST:", process.env.PGHOST);
 console.log("PGDATABASE:", process.env.PGDATABASE);
 
+const DATA_INICIO_COPA = new Date("2026-06-11");
+const DATA_INICIO_MATAMATA = new Date("2026-06-30");
+
 const pool = require("./db");
 
 pool.query("SELECT NOW()")
@@ -141,5 +144,56 @@ app.post("/apostar", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ erro: "Erro ao salvar aposta" });
+  }
+});
+
+  // ARTILHEIRO
+app.post("/artilheiro", async (req, res) => {
+  const { usuario_id, tipo, jogador } = req.body;
+
+  const agora = new Date();
+
+  // ⛔ REGRA DE BLOQUEIO
+  if (tipo === "geral" && agora >= DATA_INICIO_COPA) {
+    return res.status(400).json({ erro: "Aposta geral encerrada." });
+  }
+
+  if (tipo === "parcial" && agora >= DATA_INICIO_MATAMATA) {
+    return res.status(400).json({ erro: "Aposta parcial encerrada." });
+  }
+
+  try {
+    await pool.query(
+      `
+      INSERT INTO aposta_artilheiro (usuario_id, tipo, jogador)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (usuario_id, tipo)
+      DO UPDATE SET jogador = EXCLUDED.jogador
+      `,
+      [usuario_id, tipo, jogador]
+    );
+
+    res.json({ sucesso: true });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: "Erro ao salvar artilheiro" });
+  }
+});
+
+app.get("/artilheiro/:usuarioId", async (req, res) => {
+  const { usuarioId } = req.params;
+
+  try {
+    const resultado = await pool.query(
+      "SELECT tipo, jogador FROM aposta_artilheiro WHERE usuario_id = $1",
+      [usuarioId]
+    );
+
+    res.json(resultado.rows);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: "Erro ao buscar artilheiro" });
   }
 });
