@@ -95,6 +95,27 @@ app.post("/login", async (req, res) => {
 
 const PORT = 3000;
 
+// ===============================
+// BUSCAR APOSTAS DO USUÁRIO
+// ===============================
+
+app.get("/apostas/:usuarioId", async (req, res) => {
+  const { usuarioId } = req.params;
+
+  try {
+    const resultado = await pool.query(
+      "SELECT * FROM apostas WHERE usuario_id = $1",
+      [usuarioId]
+    );
+
+    res.json(resultado.rows);
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ erro: "Erro ao buscar apostas" });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
