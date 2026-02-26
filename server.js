@@ -99,35 +99,26 @@ app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
 
-  // SALVAR A APOSTA E CONECTAR COM O USUÁRIO
+// SALVAR OU ATUALIZAR A APOSTA
 app.post("/apostar", async (req, res) => {
   const { usuario_id, jogo, gols_casa, gols_fora } = req.body;
 
   try {
     await pool.query(
-      "INSERT INTO apostas (usuario_id, jogo, gols_casa, gols_fora) VALUES ($1, $2, $3, $4)",
+      `
+      INSERT INTO apostas (usuario_id, jogo, gols_casa, gols_fora)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (usuario_id, jogo)
+      DO UPDATE SET
+        gols_casa = EXCLUDED.gols_casa,
+        gols_fora = EXCLUDED.gols_fora
+      `,
       [usuario_id, jogo, gols_casa, gols_fora]
     );
 
     res.json({ sucesso: true });
   } catch (err) {
     console.error(err);
-    res.json({ erro: "Erro ao salvar aposta" });
-  }
-});
-
-app.get("/apostas/:usuario_id", async (req, res) => {
-  const { usuario_id } = req.params;
-
-  try {
-    const resultado = await pool.query(
-      "SELECT * FROM apostas WHERE usuario_id = $1",
-      [usuario_id]
-    );
-
-    res.json(resultado.rows);
-  } catch (err) {
-    console.error(err);
-    res.json({ erro: "Erro ao buscar apostas" });
+    res.status(500).json({ erro: "Erro ao salvar aposta" });
   }
 });
