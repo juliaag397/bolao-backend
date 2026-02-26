@@ -1,3 +1,7 @@
+console.log("PGUSER:", process.env.PGUSER);
+console.log("PGHOST:", process.env.PGHOST);
+console.log("PGDATABASE:", process.env.PGDATABASE);
+
 const pool = require("./db");
 
 pool.query("SELECT NOW()")
