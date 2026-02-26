@@ -80,7 +80,10 @@ app.post("/login", async (req, res) => {
       return res.json({ erro: "Senha incorreta!" });
     }
 
-    res.json({ usuario });
+    res.json({
+      id: usuario.id,
+      nome: usuario.nome
+    });
 
   } catch (error) {
     console.error(error);
@@ -94,4 +97,37 @@ const PORT = 3000;
 
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
+});
+
+  // SALVAR A APOSTA E CONECTAR COM O USUÁRIO
+app.post("/apostar", async (req, res) => {
+  const { usuario_id, jogo, gols_casa, gols_fora } = req.body;
+
+  try {
+    await pool.query(
+      "INSERT INTO apostas (usuario_id, jogo, gols_casa, gols_fora) VALUES ($1, $2, $3, $4)",
+      [usuario_id, jogo, gols_casa, gols_fora]
+    );
+
+    res.json({ sucesso: true });
+  } catch (err) {
+    console.error(err);
+    res.json({ erro: "Erro ao salvar aposta" });
+  }
+});
+
+app.get("/apostas/:usuario_id", async (req, res) => {
+  const { usuario_id } = req.params;
+
+  try {
+    const resultado = await pool.query(
+      "SELECT * FROM apostas WHERE usuario_id = $1",
+      [usuario_id]
+    );
+
+    res.json(resultado.rows);
+  } catch (err) {
+    console.error(err);
+    res.json({ erro: "Erro ao buscar apostas" });
+  }
 });
