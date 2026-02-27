@@ -3,7 +3,6 @@ console.log("PGHOST:", process.env.PGHOST);
 console.log("PGDATABASE:", process.env.PGDATABASE);
 
 const pool = require("./db");
-const session = require("express-session");
 
 pool.query("SELECT NOW()")
   .then(res => {
@@ -27,7 +26,14 @@ app.use(express.json());
 
 app.set("trust proxy", 1);
 
+const session = require("express-session");
+const pgSession = require("connect-pg-simple")(session);
+
 app.use(session({
+  store: new pgSession({
+    pool: pool,
+    tableName: "user_sessions"
+  }),
   secret: "segredo-super-seguro",
   resave: false,
   saveUninitialized: false,
