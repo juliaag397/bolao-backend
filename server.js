@@ -19,7 +19,6 @@ const cors = require("cors");
 const app = express();
 
 app.use(cors({
-  origin: "http://localhost:5500", // ajuste se for outra porta
   origin: [
     "http://localhost:5500",
     "https://bolao-frontend-ehazlgzcy-juliaag397s-projects.vercel.app"
@@ -29,12 +28,13 @@ app.use(cors({
 
 app.use(express.json());
 
+app.set("trust proxy", 1);
+
 app.use(session({
   secret: "segredo-super-seguro",
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: false // true só se for https
     secure: true,
     sameSite: "none"
   }
@@ -176,16 +176,11 @@ app.post("/salvar-artilheiro", async (req, res) => {
         );
 
         res.json({ sucesso: true });
-        res.json({
-          sucesso: true,
-          id: usuario.id,
-          nome: usuario.nome
-        });
 
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ erro: "Erro ao salvar aposta" });
-    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: "Erro ao salvar aposta" });
+  }
 
 });
 
@@ -199,9 +194,7 @@ app.listen(PORT, () => {
 
 // SALVAR OU ATUALIZAR A APOSTA
 app.post("/apostar", async (req, res) => {
-  const { usuario_id, jogo, gols_casa, gols_fora } = req.body;
 
-  // 🔐 Verifica se está logado
   if (!req.session.usuarioId) {
     return res.status(401).json({ erro: "Não autenticado" });
   }
@@ -224,26 +217,6 @@ app.post("/apostar", async (req, res) => {
 
     res.json({ sucesso: true });
 
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ erro: "Erro ao salvar aposta" });
-  }
-});
-
-  try {
-    await pool.query(
-      `
-      INSERT INTO apostas (usuario_id, jogo, gols_casa, gols_fora)
-      VALUES ($1, $2, $3, $4)
-      ON CONFLICT (usuario_id, jogo)
-      DO UPDATE SET
-        gols_casa = EXCLUDED.gols_casa,
-        gols_fora = EXCLUDED.gols_fora
-      `,
-      [usuario_id, jogo, gols_casa, gols_fora]
-    );
-
-    res.json({ sucesso: true });
   } catch (err) {
     console.error(err);
     res.status(500).json({ erro: "Erro ao salvar aposta" });
