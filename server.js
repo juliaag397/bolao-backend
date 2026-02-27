@@ -158,11 +158,11 @@ app.get("/apostas/:usuarioId", async (req, res) => {
 
 app.post("/salvar-artilheiro", async (req, res) => {
 
-  if (!req.session.usuarioId) {
+  if (!req.session.usuario) {
     return res.status(401).json({ erro: "Não autenticado" });
   }
 
-  const usuario_id = req.session.usuarioId;
+  const usuario_id = req.session.usuario.id;
   const { tipo, jogador } = req.body;
 
   try {
@@ -193,11 +193,11 @@ app.post("/salvar-artilheiro", async (req, res) => {
 
 app.get("/artilheiros", async (req, res) => {
 
-  if (!req.session.usuarioId) {
+  if (!req.session.usuario) {
     return res.status(401).json({ erro: "Não autenticado" });
   }
 
-  const usuario_id = req.session.usuarioId;
+  const usuario_id = req.session.usuario.id;
 
   try {
 
@@ -236,11 +236,11 @@ app.listen(PORT, () => {
 // SALVAR OU ATUALIZAR A APOSTA
 app.post("/apostar", async (req, res) => {
 
-  if (!req.session.usuarioId) {
+  if (!req.session.usuario) {
     return res.status(401).json({ erro: "Não autenticado" });
   }
 
-  const usuario_id = req.session.usuarioId;
+  const usuario_id = req.session.usuario.id;
   const { jogo, gols_casa, gols_fora } = req.body;
 
   try {
