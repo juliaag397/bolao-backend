@@ -37,6 +37,7 @@ app.use(session({
   secret: "segredo-super-seguro",
   resave: false,
   saveUninitialized: false,
+  proxy: true,
   cookie: {
     secure: true,
     sameSite: "none"
@@ -229,9 +230,7 @@ app.get("/verificar-login", (req, res) => {
 
 });
 
-app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
-});
+
 
 // SALVAR OU ATUALIZAR A APOSTA
 app.post("/apostar", async (req, res) => {
@@ -262,4 +261,8 @@ app.post("/apostar", async (req, res) => {
     console.error(err);
     res.status(500).json({ erro: "Erro ao salvar aposta" });
   }
+});
+
+app.listen(PORT, () => {
+  console.log(`Servidor rodando na porta ${PORT}`);
 });
