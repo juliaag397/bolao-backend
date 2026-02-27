@@ -2,6 +2,9 @@ console.log("PGUSER:", process.env.PGUSER);
 console.log("PGHOST:", process.env.PGHOST);
 console.log("PGDATABASE:", process.env.PGDATABASE);
 
+const DATA_INICIO_COPA = new Date("2026-06-11");
+const DATA_INICIO_MATAMATA = new Date("2026-06-30");
+
 const pool = require("./db");
 
 pool.query("SELECT NOW()")
@@ -144,36 +147,53 @@ app.post("/apostar", async (req, res) => {
   }
 });
 
-// ARTILHEIRO
-app.post("/salvar-artilheiro", async (req, res) => {
+  // ARTILHEIRO
+app.post("/artilheiro", async (req, res) => {
+  const { usuario_id, tipo, jogador } = req.body;
 
-    const { usuarioId, tipoAposta, jogador } = req.body;
+  const agora = new Date();
 
-    const hoje = new Date();
+  // ⛔ REGRA DE BLOQUEIO
+  if (tipo === "geral" && agora >= DATA_INICIO_COPA) {
+    return res.status(400).json({ erro: "Aposta geral encerrada." });
+  }
 
-    const inicioCopa = new Date("2026-06-11");
-    const fimFaseGrupos = new Date("2026-06-25");
-    const inicioMataMata = new Date("2026-06-28");
+  if (tipo === "parcial" && agora >= DATA_INICIO_MATAMATA) {
+    return res.status(400).json({ erro: "Aposta parcial encerrada." });
+  }
 
-    // VALIDAÇÃO DE PERÍODO (SEGURANÇA REAL)
-    if (tipoAposta == 1 && hoje >= inicioCopa) {
-        return res.status(400).json({ erro: "Prazo encerrado" });
-    }
+  try {
+    await pool.query(
+      `
+      INSERT INTO aposta_artilheiro (usuario_id, tipo, jogador)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (usuario_id, tipo)
+      DO UPDATE SET jogador = EXCLUDED.jogador
+      `,
+      [usuario_id, tipo, jogador]
+    );
 
-    if (tipoAposta == 2 && (hoje < fimFaseGrupos || hoje >= inicioMataMata)) {
-        return res.status(400).json({ erro: "Período inválido" });
-    }
+    res.json({ sucesso: true });
 
-    try {
-        await db.query(
-            "INSERT INTO apostas_artilheiro (usuario_id, tipo_aposta, jogador) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE jogador = ?",
-            [usuarioId, tipoAposta, jogador, jogador]
-        );
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: "Erro ao salvar artilheiro" });
+  }
+});
 
-        res.json({ sucesso: true });
+app.get("/artilheiro/:usuarioId", async (req, res) => {
+  const { usuarioId } = req.params;
 
-    } catch (err) {
-        res.status(500).json({ erro: "Erro ao salvar aposta" });
-    }
+  try {
+    const resultado = await pool.query(
+      "SELECT tipo, jogador FROM aposta_artilheiro WHERE usuario_id = $1",
+      [usuarioId]
+    );
 
+    res.json(resultado.rows);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: "Erro ao buscar artilheiro" });
+  }
 });
