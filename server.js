@@ -152,50 +152,65 @@ app.get("/apostas/:usuarioId", async (req, res) => {
 });
 
 // ARTILHEIRO
+// ===============================
+// SALVAR OU ATUALIZAR APOSTA ARTILHEIRO
+// ===============================
+
 app.post("/salvar-artilheiro", async (req, res) => {
 
-    // 🔐 1️⃣ Verifica se está logado (NÃO pode confiar no usuarioId vindo do front)
-    if (!req.session.usuarioId) {
-        return res.status(401).json({ erro: "Usuário não autenticado" });
-    }
+  if (!req.session.usuarioId) {
+    return res.status(401).json({ erro: "Não autenticado" });
+  }
 
-    const usuarioId = req.session.usuarioId;
-    const { tipo, jogador } = req.body;
+  const usuario_id = req.session.usuarioId;
+  const { tipo, jogador } = req.body;
 
-    if (!tipo || !jogador) {
-        return res.status(400).json({ erro: "Dados incompletos" });
-    }
+  try {
 
-    const hoje = new Date();
+    await pool.query(
+      `
+      INSERT INTO aposta_artilheiro (usuario_id, tipo, jogador)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (usuario_id, tipo)
+      DO UPDATE SET
+        jogador = EXCLUDED.jogador
+      `,
+      [usuario_id, tipo, jogador]
+    );
 
-    const inicioCopa = new Date("2026-06-11");
-    const fimFaseGrupos = new Date("2026-06-25");
-    const inicioMataMata = new Date("2026-06-28");
-
-    // 🥇 APOSTA INICIAL
-    if (tipo === "inicial" && hoje >= inicioCopa) {
-        return res.status(400).json({ erro: "Prazo encerrado" });
-    }
-
-    // 🥈 APOSTA PÓS-GRUPOS
-    if (tipo === "pos_grupos" && (hoje < fimFaseGrupos || hoje >= inicioMataMata)) {
-        return res.status(400).json({ erro: "Segunda aposta bloqueada" });
-    }
-
-    try {
-        await pool.query(
-            `INSERT INTO aposta_artilheiro (usuario_id, tipo, jogador)
-             VALUES ($1, $2, $3)
-             ON CONFLICT (usuario_id, tipo)
-             DO UPDATE SET jogador = EXCLUDED.jogador`,
-            [usuarioId, tipo, jogador]
-        );
-
-        res.json({ sucesso: true });
+    res.json({ sucesso: true });
 
   } catch (err) {
     console.error(err);
-    res.status(500).json({ erro: "Erro ao salvar aposta" });
+    res.status(500).json({ erro: "Erro ao salvar artilheiro" });
+  }
+
+});
+
+// ===============================
+// BUSCAR APOSTAS ARTILHEIRO DO USUÁRIO
+// ===============================
+
+app.get("/artilheiros", async (req, res) => {
+
+  if (!req.session.usuarioId) {
+    return res.status(401).json({ erro: "Não autenticado" });
+  }
+
+  const usuario_id = req.session.usuarioId;
+
+  try {
+
+    const resultado = await pool.query(
+      "SELECT * FROM aposta_artilheiro WHERE usuario_id = $1",
+      [usuario_id]
+    );
+
+    res.json(resultado.rows);
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ erro: "Erro ao buscar artilheiros" });
   }
 
 });
