@@ -99,7 +99,11 @@ app.post("/login", async (req, res) => {
 
     req.session.usuarioId = usuario.id; // 🔥 ESSENCIAL
 
-    res.json({ sucesso: true });
+    res.json({
+      sucesso: true,
+      id: usuario.id,
+      nome: usuario.nome
+    });
 
   } catch (error) {
     console.error(error);
