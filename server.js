@@ -147,7 +147,17 @@ app.post("/apostar", async (req, res) => {
 // ARTILHEIRO
 app.post("/salvar-artilheiro", async (req, res) => {
 
-    const { usuarioId, tipoAposta, jogador } = req.body;
+    // 🔐 1️⃣ Verifica se está logado (NÃO pode confiar no usuarioId vindo do front)
+    if (!req.session.usuarioId) {
+        return res.status(401).json({ erro: "Usuário não autenticado" });
+    }
+
+    const usuarioId = req.session.usuarioId;
+    const { tipo, jogador } = req.body;
+
+    if (!tipo || !jogador) {
+        return res.status(400).json({ erro: "Dados incompletos" });
+    }
 
     const hoje = new Date();
 
@@ -155,24 +165,29 @@ app.post("/salvar-artilheiro", async (req, res) => {
     const fimFaseGrupos = new Date("2026-06-25");
     const inicioMataMata = new Date("2026-06-28");
 
-    // VALIDAÇÃO DE PERÍODO (SEGURANÇA REAL)
-    if (tipoAposta == 1 && hoje >= inicioCopa) {
+    // 🥇 APOSTA INICIAL
+    if (tipo === "inicial" && hoje >= inicioCopa) {
         return res.status(400).json({ erro: "Prazo encerrado" });
     }
 
-    if (tipoAposta == 2 && (hoje < fimFaseGrupos || hoje >= inicioMataMata)) {
-        return res.status(400).json({ erro: "Período inválido" });
+    // 🥈 APOSTA PÓS-GRUPOS
+    if (tipo === "pos_grupos" && (hoje < fimFaseGrupos || hoje >= inicioMataMata)) {
+        return res.status(400).json({ erro: "Segunda aposta bloqueada" });
     }
 
     try {
         await db.query(
-            "INSERT INTO apostas_artilheiro (usuario_id, tipo_aposta, jogador) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE jogador = ?",
-            [usuarioId, tipoAposta, jogador, jogador]
+            `INSERT INTO aposta_artilheiro (usuario_id, tipo, jogador)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (usuario_id, tipo)
+             DO UPDATE SET jogador = EXCLUDED.jogador`,
+            [usuarioId, tipo, jogador]
         );
 
         res.json({ sucesso: true });
 
     } catch (err) {
+        console.error(err);
         res.status(500).json({ erro: "Erro ao salvar aposta" });
     }
 
