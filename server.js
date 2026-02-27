@@ -103,7 +103,10 @@ app.post("/login", async (req, res) => {
       return res.json({ erro: "Senha incorreta!" });
     }
 
-    req.session.usuarioId = usuario.id; // 🔥 ESSENCIAL
+    req.session.usuario = {
+      id: usuario.id,
+      nome: usuario.nome
+    };
 
     res.json({
       sucesso: true,
@@ -198,7 +201,17 @@ app.post("/salvar-artilheiro", async (req, res) => {
 });
 
 app.get("/verificar-login", (req, res) => {
-    res.json({ logado: !!req.session.usuarioId });
+
+    if (req.session.usuario) {
+        res.json({
+            logado: true,
+            id: req.session.usuario.id,
+            nome: req.session.usuario.nome
+        });
+    } else {
+        res.json({ logado: false });
+    }
+
 });
 
 app.listen(PORT, () => {
