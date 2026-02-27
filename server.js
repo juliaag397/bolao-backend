@@ -3,7 +3,6 @@ console.log("PGHOST:", process.env.PGHOST);
 console.log("PGDATABASE:", process.env.PGDATABASE);
 
 const pool = require("./db");
-const session = require("express-session");
 
 pool.query("SELECT NOW()")
   .then(res => {
@@ -18,25 +17,8 @@ const cors = require("cors");
 
 const app = express();
 
-app.use(cors({
-  origin: [
-    "http://localhost:5500",
-    "https://bolao-frontend-ehazlgzcy-juliaag397s-projects.vercel.app"
-  ],
-  credentials: true
-}));
-
+app.use(cors());
 app.use(express.json());
-
-app.use(session({
-  secret: "segredo-super-seguro",
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: true,
-    sameSite: "none"
-  }
-}));
 
 
 
@@ -98,9 +80,10 @@ app.post("/login", async (req, res) => {
       return res.json({ erro: "Senha incorreta!" });
     }
 
-    req.session.usuarioId = usuario.id; // 🔥 ESSENCIAL
-
-    res.json({ sucesso: true });
+    res.json({
+      id: usuario.id,
+      nome: usuario.nome
+    });
 
   } catch (error) {
     console.error(error);
@@ -133,20 +116,38 @@ app.get("/apostas/:usuarioId", async (req, res) => {
   }
 });
 
+app.listen(PORT, () => {
+  console.log(`Servidor rodando na porta ${PORT}`);
+});
+
+// SALVAR OU ATUALIZAR A APOSTA
+app.post("/apostar", async (req, res) => {
+  const { usuario_id, jogo, gols_casa, gols_fora } = req.body;
+
+  try {
+    await pool.query(
+      `
+      INSERT INTO apostas (usuario_id, jogo, gols_casa, gols_fora)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (usuario_id, jogo)
+      DO UPDATE SET
+        gols_casa = EXCLUDED.gols_casa,
+        gols_fora = EXCLUDED.gols_fora
+      `,
+      [usuario_id, jogo, gols_casa, gols_fora]
+    );
+
+    res.json({ sucesso: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: "Erro ao salvar aposta" });
+  }
+});
+
 // ARTILHEIRO
 app.post("/salvar-artilheiro", async (req, res) => {
 
-    // 🔐 1️⃣ Verifica se está logado (NÃO pode confiar no usuarioId vindo do front)
-    if (!req.session.usuarioId) {
-        return res.status(401).json({ erro: "Usuário não autenticado" });
-    }
-
-    const usuarioId = req.session.usuarioId;
-    const { tipo, jogador } = req.body;
-
-    if (!tipo || !jogador) {
-        return res.status(400).json({ erro: "Dados incompletos" });
-    }
+    const { usuarioId, tipoAposta, jogador } = req.body;
 
     const hoje = new Date();
 
@@ -154,95 +155,25 @@ app.post("/salvar-artilheiro", async (req, res) => {
     const fimFaseGrupos = new Date("2026-06-25");
     const inicioMataMata = new Date("2026-06-28");
 
-    // 🥇 APOSTA INICIAL
-    if (tipo === "inicial" && hoje >= inicioCopa) {
+    // VALIDAÇÃO DE PERÍODO (SEGURANÇA REAL)
+    if (tipoAposta == 1 && hoje >= inicioCopa) {
         return res.status(400).json({ erro: "Prazo encerrado" });
     }
 
-    // 🥈 APOSTA PÓS-GRUPOS
-    if (tipo === "pos_grupos" && (hoje < fimFaseGrupos || hoje >= inicioMataMata)) {
-        return res.status(400).json({ erro: "Segunda aposta bloqueada" });
+    if (tipoAposta == 2 && (hoje < fimFaseGrupos || hoje >= inicioMataMata)) {
+        return res.status(400).json({ erro: "Período inválido" });
     }
 
     try {
-        await pool.query(
-            `INSERT INTO aposta_artilheiro (usuario_id, tipo, jogador)
-             VALUES ($1, $2, $3)
-             ON CONFLICT (usuario_id, tipo)
-             DO UPDATE SET jogador = EXCLUDED.jogador`,
-            [usuarioId, tipo, jogador]
+        await db.query(
+            "INSERT INTO apostas_artilheiro (usuario_id, tipo_aposta, jogador) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE jogador = ?",
+            [usuarioId, tipoAposta, jogador, jogador]
         );
 
-        res.json({
-          sucesso: true,
-          id: usuario.id,
-          nome: usuario.nome
-        });
+        res.json({ sucesso: true });
 
     } catch (err) {
-        console.error(err);
         res.status(500).json({ erro: "Erro ao salvar aposta" });
     }
 
 });
-
-app.get("/verificar-login", (req, res) => {
-    res.json({ logado: !!req.session.usuarioId });
-});
-
-app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
-});
-
-// SALVAR OU ATUALIZAR A APOSTA
-app.post("/apostar", async (req, res) => {
-
-  // 🔐 Verifica se está logado
-  if (!req.session.usuarioId) {
-    return res.status(401).json({ erro: "Não autenticado" });
-  }
-
-  const usuario_id = req.session.usuarioId;
-  const { jogo, gols_casa, gols_fora } = req.body;
-
-  try {
-    await pool.query(
-      `
-      INSERT INTO apostas (usuario_id, jogo, gols_casa, gols_fora)
-      VALUES ($1, $2, $3, $4)
-      ON CONFLICT (usuario_id, jogo)
-      DO UPDATE SET
-        gols_casa = EXCLUDED.gols_casa,
-        gols_fora = EXCLUDED.gols_fora
-      `,
-      [usuario_id, jogo, gols_casa, gols_fora]
-    );
-
-    res.json({ sucesso: true });
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ erro: "Erro ao salvar aposta" });
-  }
-});
-
-  try {
-    await pool.query(
-      `
-      INSERT INTO apostas (usuario_id, jogo, gols_casa, gols_fora)
-      VALUES ($1, $2, $3, $4)
-      ON CONFLICT (usuario_id, jogo)
-      DO UPDATE SET
-        gols_casa = EXCLUDED.gols_casa,
-        gols_fora = EXCLUDED.gols_fora
-      `,
-      [usuario_id, jogo, gols_casa, gols_fora]
-    );
-
-    res.json({ sucesso: true });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ erro: "Erro ao salvar aposta" });
-  }
-});
-
