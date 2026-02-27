@@ -143,3 +143,37 @@ app.post("/apostar", async (req, res) => {
     res.status(500).json({ erro: "Erro ao salvar aposta" });
   }
 });
+
+// ARTILHEIRO
+app.post("/salvar-artilheiro", async (req, res) => {
+
+    const { usuarioId, tipoAposta, jogador } = req.body;
+
+    const hoje = new Date();
+
+    const inicioCopa = new Date("2026-06-11");
+    const fimFaseGrupos = new Date("2026-06-25");
+    const inicioMataMata = new Date("2026-06-28");
+
+    // VALIDAÇÃO DE PERÍODO (SEGURANÇA REAL)
+    if (tipoAposta == 1 && hoje >= inicioCopa) {
+        return res.status(400).json({ erro: "Prazo encerrado" });
+    }
+
+    if (tipoAposta == 2 && (hoje < fimFaseGrupos || hoje >= inicioMataMata)) {
+        return res.status(400).json({ erro: "Período inválido" });
+    }
+
+    try {
+        await db.query(
+            "INSERT INTO apostas_artilheiro (usuario_id, tipo_aposta, jogador) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE jogador = ?",
+            [usuarioId, tipoAposta, jogador, jogador]
+        );
+
+        res.json({ sucesso: true });
+
+    } catch (err) {
+        res.status(500).json({ erro: "Erro ao salvar aposta" });
+    }
+
+});
