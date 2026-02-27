@@ -3,6 +3,7 @@ console.log("PGHOST:", process.env.PGHOST);
 console.log("PGDATABASE:", process.env.PGDATABASE);
 
 const pool = require("./db");
+const session = require("express-session");
 
 pool.query("SELECT NOW()")
   .then(res => {
@@ -17,8 +18,21 @@ const cors = require("cors");
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: "http://localhost:5500", // ajuste se for outra porta
+  credentials: true
+}));
+
 app.use(express.json());
+
+app.use(session({
+  secret: "segredo-super-seguro",
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: false // true só se for https
+  }
+}));
 
 
 
@@ -80,10 +94,9 @@ app.post("/login", async (req, res) => {
       return res.json({ erro: "Senha incorreta!" });
     }
 
-    res.json({
-      id: usuario.id,
-      nome: usuario.nome
-    });
+    req.session.usuarioId = usuario.id; // 🔥 ESSENCIAL
+
+    res.json({ sucesso: true });
 
   } catch (error) {
     console.error(error);
@@ -148,7 +161,7 @@ app.post("/salvar-artilheiro", async (req, res) => {
     }
 
     try {
-        await db.query(
+        await pool.query(
             `INSERT INTO aposta_artilheiro (usuario_id, tipo, jogador)
              VALUES ($1, $2, $3)
              ON CONFLICT (usuario_id, tipo)
