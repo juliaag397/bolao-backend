@@ -249,4 +249,3 @@ app.post("/apostar", async (req, res) => {
     res.status(500).json({ erro: "Erro ao salvar aposta" });
   }
 });
-~
