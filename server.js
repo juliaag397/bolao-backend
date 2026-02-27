@@ -18,7 +18,10 @@ const cors = require("cors");
 const app = express();
 
 app.use(cors({
-  origin: "https://bolao-frontend-pbfd65n4n-juliaag397s-projects.vercel.app",
+  origin: [
+    "https://bolao-frontend-oey4hp6ca-juliaag397s-projects.vercel.app",
+    "https://bolao-frontend-pbfd65n4n-juliaag397s-projects.vercel.app"
+  ],
   credentials: true
 }));
 
