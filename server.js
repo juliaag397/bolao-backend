@@ -19,10 +19,7 @@ const cors = require("cors");
 const app = express();
 
 app.use(cors({
-  origin: [
-    "http://localhost:5500",
-    "https://bolao-frontend-ehazlgzcy-juliaag397s-projects.vercel.app"
-  ],
+  origin: true,
   credentials: true
 }));
 
