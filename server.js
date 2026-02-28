@@ -265,6 +265,92 @@ app.post("/apostar", async (req, res) => {
   }
 });
 
+app.post("/calcular-pontos/:usuarioId", async (req, res) => {
+  const { usuarioId } = req.params;
+
+  try {
+
+    // 1️⃣ Buscar apostas do usuário
+    const apostasResult = await pool.query(
+      "SELECT * FROM apostas WHERE usuario_id = $1",
+      [usuarioId]
+    );
+
+    const apostas = apostasResult.rows;
+
+    let totalPontos = 0;
+
+    for (let aposta of apostas) {
+
+      // 2️⃣ Buscar resultado oficial do jogo
+      const jogoOficialResult = await pool.query(
+        "SELECT * FROM jogos_oficiais WHERE jogo = $1",
+        [aposta.jogo]
+      );
+
+      if (jogoOficialResult.rows.length === 0) continue;
+
+      const jogoOficial = jogoOficialResult.rows[0];
+
+      totalPontos += calcularPontos(aposta, jogoOficial);
+    }
+
+    // ===== ARTIHEIRO =====
+
+    const apostasArtilheiroResult = await pool.query(
+      "SELECT * FROM aposta_artilheiro WHERE usuario_id = $1",
+      [usuarioId]
+    );
+
+    const artilheiroOficialResult = await pool.query(
+      "SELECT artilheiro_oficial FROM configuracoes LIMIT 1"
+    );
+
+    if (artilheiroOficialResult.rows.length > 0) {
+
+      const artilheiroOficial =
+        artilheiroOficialResult.rows[0].artilheiro_oficial;
+
+      for (let aposta of apostasArtilheiroResult.rows) {
+
+        if (aposta.jogador === artilheiroOficial) {
+
+          if (aposta.tipo === "inicial") totalPontos += 25;
+          if (aposta.tipo === "pos_grupos") totalPontos += 15;
+
+        }
+      }
+    }
+
+    // 3️⃣ Atualizar pontuação no usuário
+    await pool.query(
+      "UPDATE usuarios SET pontos = $1 WHERE id = $2",
+      [totalPontos, usuarioId]
+    );
+
+    res.json({ message: "Pontuação atualizada!", totalPontos });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ erro: "Erro ao calcular pontos" });
+  }
+});
+
+app.get("/ranking", async (req, res) => {
+  try {
+
+    const resultado = await pool.query(
+      "SELECT nome, pontos FROM usuarios ORDER BY pontos DESC"
+    );
+
+    res.json(resultado.rows);
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ erro: "Erro ao buscar ranking" });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
