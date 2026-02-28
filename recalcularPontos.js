@@ -88,7 +88,16 @@ async function recalcular() {
 
         const jogoOficial = jogoOficialResult.rows[0];
 
-        totalPontos += calcularPontos(aposta, jogoOficial);
+        const pontosJogo = calcularPontos(aposta, jogoOficial);
+
+        // 🔥 Salva os pontos individuais da aposta
+        await pool.query(
+          "UPDATE apostas SET pontos = $1 WHERE id = $2",
+          [pontosJogo, aposta.id]
+        );
+
+        // 🔥 Soma no total do usuário
+        totalPontos += pontosJogo;
       }
 
       // 4️⃣ Atualizar pontos no banco
