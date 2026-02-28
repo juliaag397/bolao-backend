@@ -3,36 +3,59 @@ const pool = require("./db");
 
 // ⚽ mesma lógica que você usa no backend
 function calcularPontos(aposta, jogoOficial) {
-  let pontos = 0;
+  const golsApostaCasa = aposta.gols_casa;
+  const golsApostaFora = aposta.gols_fora;
 
-  // Placar exato
+  const golsOficialCasa = jogoOficial.gols_casa;
+  const golsOficialFora = jogoOficial.gols_fora;
+
+  // 🔥 1️⃣ Placar exato
   if (
-    aposta.gols_casa === jogoOficial.gols_casa &&
-    aposta.gols_fora === jogoOficial.gols_fora
+    golsApostaCasa === golsOficialCasa &&
+    golsApostaFora === golsOficialFora
   ) {
     return 10;
   }
 
-  // Acertou vencedor ou empate
+  // Resultado da aposta
   const resultadoAposta =
-    aposta.gols_casa > aposta.gols_fora
+    golsApostaCasa > golsApostaFora
       ? "casa"
-      : aposta.gols_casa < aposta.gols_fora
+      : golsApostaCasa < golsApostaFora
       ? "fora"
       : "empate";
 
+  // Resultado oficial
   const resultadoOficial =
-    jogoOficial.gols_casa > jogoOficial.gols_fora
+    golsOficialCasa > golsOficialFora
       ? "casa"
-      : jogoOficial.gols_casa < jogoOficial.gols_fora
+      : golsOficialCasa < golsOficialFora
       ? "fora"
       : "empate";
 
+  // 🔥 2️⃣ Se acertou vencedor ou empate
   if (resultadoAposta === resultadoOficial) {
-    pontos = 5;
+
+    // 👉 Se for empate
+    if (resultadoOficial === "empate") {
+      return 3; // Empate simples (já sabemos que não foi placar exato)
+    }
+
+    // 👉 Se for vitória (casa ou fora)
+    const diferencaAposta = Math.abs(golsApostaCasa - golsApostaFora);
+    const diferencaOficial = Math.abs(golsOficialCasa - golsOficialFora);
+
+    // 🔥 Vencedor + diferença correta
+    if (diferencaAposta === diferencaOficial) {
+      return 6;
+    }
+
+    // 🔥 Vencedor seco
+    return 4;
   }
 
-  return pontos;
+  // ❌ Errou tudo
+  return 0;
 }
 
 async function recalcular() {
