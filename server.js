@@ -292,7 +292,15 @@ app.post("/calcular-pontos/:usuarioId", async (req, res) => {
 
       const jogoOficial = jogoOficialResult.rows[0];
 
-      totalPontos += calcularPontos(aposta, jogoOficial);
+      const pontos = calcularPontos(aposta, jogoOficial);
+
+      totalPontos += pontos;
+
+      // salvar pontos na aposta
+      await pool.query(
+        "UPDATE apostas SET pontos = $1 WHERE usuario_id = $2 AND jogo = $3",
+        [pontos, usuarioId, aposta.jogo]
+      );
     }
 
     // ===== ARTIHEIRO =====

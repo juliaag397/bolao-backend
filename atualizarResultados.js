@@ -11,7 +11,7 @@ async function atualizar() {
       gols_casa = EXCLUDED.gols_casa,
       gols_fora = EXCLUDED.gols_fora
     `,
-    ['México x Coréia do Sul - 18/06', 2, 2]
+    ['México x África do Sul - 11/06', 3, 0]
   );
 
   console.log("Resultado atualizado!");
