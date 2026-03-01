@@ -359,6 +359,11 @@ app.get("/ranking", async (req, res) => {
   }
 });
 
+app.get("/jogos", async (req, res) => {
+  const result = await pool.query("SELECT * FROM jogos_oficiais");
+  res.json(result.rows);
+});
+
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
