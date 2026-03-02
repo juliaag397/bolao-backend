@@ -359,6 +359,27 @@ app.get("/ranking", async (req, res) => {
   }
 });
 
+  // PARA PEGAR A PONTUAÇÃO TOTAL DO BANCO
+app.get("/minha-pontuacao", async (req, res) => {
+
+  if (!req.session.usuario) {
+    return res.status(401).json({ erro: "Não autenticado" });
+  }
+
+  try {
+    const result = await pool.query(
+      "SELECT pontos FROM usuarios WHERE id = $1",
+      [req.session.usuario.id]
+    );
+
+    res.json({ pontos: result.rows[0].pontos });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ erro: "Erro ao buscar pontuação" });
+  }
+});
+
 app.get("/jogos", async (req, res) => {
   const result = await pool.query("SELECT * FROM jogos_oficiais");
   res.json(result.rows);
