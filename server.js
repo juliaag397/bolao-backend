@@ -385,6 +385,31 @@ app.get("/jogos", async (req, res) => {
   res.json(result.rows);
 });
 
+  // grupos
+app.post("/api/create-group", async (req, res) => {
+    const { name, rules } = req.body;
+    const userId = req.session.userId; // ou token
+
+    const { data, error } = await supabase
+        .from("groups")
+        .insert([{ name, rules, created_by: userId }])
+        .select()
+        .single();
+
+    if (error) {
+        return res.json({ error: true });
+    }
+
+    await supabase.from("group_members").insert([
+        { group_id: data.id, user_id: userId }
+    ]);
+
+    res.json({
+        success: true,
+        code: data.code
+    });
+});
+
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
