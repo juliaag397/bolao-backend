@@ -387,8 +387,12 @@ app.get("/jogos", async (req, res) => {
 
   // grupos
 app.post("/api/create-group", async (req, res) => {
+    if (!req.session.usuario) {
+        return res.status(401).json({ error: "Não autenticado" });
+    }
+
     const { name, rules } = req.body;
-    const userId = req.session.userId; // ou token
+    const userId = req.session.usuario.id; // 👈 CORRETO
 
     const { data, error } = await supabase
         .from("groups")
@@ -397,7 +401,8 @@ app.post("/api/create-group", async (req, res) => {
         .single();
 
     if (error) {
-        return res.json({ error: true });
+        console.error(error);
+        return res.status(500).json({ error: true });
     }
 
     await supabase.from("group_members").insert([
