@@ -415,24 +415,30 @@ app.post("/api/create-group", async (req, res) => {
     });
 });
 
-app.get("/api/ranking/:groupId", async (req, res) => {
-    const { groupId } = req.params;
+app.get("/ranking-grupo/:groupId", async (req, res) => {
+  const { groupId } = req.params;
 
-    const { data, error } = await supabase
-        .from("group_members")
-        .select(`
-            score,
-            user_id,
-            users:user_id ( email )
-        `)
-        .eq("group_id", groupId)
-        .order("score", { ascending: false });
+  try {
+    const result = await pool.query(
+      `
+      SELECT 
+        gm.score,
+        gm.user_id,
+        u.nome
+      FROM group_members gm
+      JOIN usuarios u ON u.id = gm.user_id
+      WHERE gm.group_id = $1
+      ORDER BY gm.score DESC
+      `,
+      [groupId]
+    );
 
-    if (error) {
-        return res.status(500).json({ error: true });
-    }
+    res.json(result.rows);
 
-    res.json(data);
+  } catch (error) {
+    console.error("Erro ao buscar ranking do grupo:", error);
+    res.status(500).json({ erro: "Erro no servidor" });
+  }
 });
 
 app.listen(PORT, () => {
