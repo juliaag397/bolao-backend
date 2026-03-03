@@ -387,36 +387,48 @@ app.get("/jogos", async (req, res) => {
 
   // grupos
 app.post("/create-group", async (req, res) => {
-    if (!req.session.usuario) {
-        return res.status(401).json({ error: "Não autenticado" });
-    }
 
-    const { name, rules } = req.body;
-    const userId = req.session.usuario.id; // 👈 CORRETO
+  if (!req.session.usuario) {
+    return res.status(401).json({ error: "Não autenticado" });
+  }
 
-    const { data, error } = await supabase
-        .from("groups")
-        .insert([{ name, rules, created_by: userId }])
-        .select()
-        .single();
+  const { name, rules } = req.body;
+  const userId = req.session.usuario.id;
 
-    if (error) {
-        console.error(error);
-        return res.status(500).json({ error: true });
-    }
+  try {
 
+    // 1️⃣ Criar grupo
+    const groupResult = await pool.query(
+      `
+      INSERT INTO groups (name, rules, created_by)
+      VALUES ($1, $2, $3)
+      RETURNING id, code
+      `,
+      [name, rules, userId]
+    );
+
+    const group = groupResult.rows[0];
+
+    // 2️⃣ Inserir criador como membro
     await pool.query(
       `
       INSERT INTO group_members (group_id, user_id, score)
       VALUES ($1, $2, 0)
       ON CONFLICT (group_id, user_id) DO NOTHING
       `,
-      [data.id, userId]
+      [group.id, userId]
     );
+
     res.json({
-        success: true,
-        code: data.code
+      success: true,
+      code: group.code
     });
+
+  } catch (erro) {
+    console.error("Erro ao criar grupo:", erro);
+    res.status(500).json({ error: "Erro no servidor" });
+  }
+
 });
 
 app.get("/ranking-grupo/:groupId", async (req, res) => {
