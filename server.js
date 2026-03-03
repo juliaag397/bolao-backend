@@ -410,6 +410,26 @@ app.post("/api/create-group", async (req, res) => {
     });
 });
 
+app.get("/api/ranking/:groupId", async (req, res) => {
+    const { groupId } = req.params;
+
+    const { data, error } = await supabase
+        .from("group_members")
+        .select(`
+            score,
+            user_id,
+            users:user_id ( email )
+        `)
+        .eq("group_id", groupId)
+        .order("score", { ascending: false });
+
+    if (error) {
+        return res.status(500).json({ error: true });
+    }
+
+    res.json(data);
+});
+
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
