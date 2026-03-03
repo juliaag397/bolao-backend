@@ -405,10 +405,14 @@ app.post("/create-group", async (req, res) => {
         return res.status(500).json({ error: true });
     }
 
-    await supabase.from("group_members").insert([
-        { group_id: data.id, user_id: userId }
-    ]);
-
+    await pool.query(
+      `
+      INSERT INTO group_members (group_id, user_id, score)
+      VALUES ($1, $2, 0)
+      ON CONFLICT (group_id, user_id) DO NOTHING
+      `,
+      [data.id, userId]
+    );
     res.json({
         success: true,
         code: data.code
