@@ -386,7 +386,7 @@ app.get("/jogos", async (req, res) => {
 });
 
   // grupos
-app.post("/api/create-group", async (req, res) => {
+app.post("/create-group", async (req, res) => {
     if (!req.session.usuario) {
         return res.status(401).json({ error: "Não autenticado" });
     }
@@ -416,15 +416,14 @@ app.post("/api/create-group", async (req, res) => {
 });
 
 app.get("/ranking-grupo/:groupId", async (req, res) => {
+
   const { groupId } = req.params;
 
   try {
+
     const result = await pool.query(
       `
-      SELECT 
-        gm.score,
-        gm.user_id,
-        u.nome
+      SELECT u.nome, gm.score
       FROM group_members gm
       JOIN usuarios u ON u.id = gm.user_id
       WHERE gm.group_id = $1
@@ -435,10 +434,82 @@ app.get("/ranking-grupo/:groupId", async (req, res) => {
 
     res.json(result.rows);
 
-  } catch (error) {
-    console.error("Erro ao buscar ranking do grupo:", error);
+  } catch (erro) {
+    console.error("Erro ao buscar ranking:", erro);
     res.status(500).json({ erro: "Erro no servidor" });
   }
+
+});
+
+app.post("/join-group", async (req, res) => {
+
+  if (!req.session.usuario) {
+    return res.status(401).json({ erro: "Não autenticado" });
+  }
+
+  const usuario_id = req.session.usuario.id;
+  const { code } = req.body;
+
+  try {
+
+    // 1️⃣ Buscar grupo pelo código
+    const grupoResult = await pool.query(
+      "SELECT id FROM groups WHERE code = $1",
+      [code]
+    );
+
+    if (grupoResult.rows.length === 0) {
+      return res.status(404).json({ erro: "Grupo não encontrado" });
+    }
+
+    const group_id = grupoResult.rows[0].id;
+
+    // 2️⃣ Inserir membro
+    await pool.query(
+      `
+      INSERT INTO group_members (group_id, user_id, score)
+      VALUES ($1, $2, 0)
+      ON CONFLICT (group_id, user_id) DO NOTHING
+      `,
+      [group_id, usuario_id]
+    );
+
+    res.json({ sucesso: true });
+
+  } catch (erro) {
+    console.error("Erro ao entrar no grupo:", erro);
+    res.status(500).json({ erro: "Erro no servidor" });
+  }
+
+});
+
+app.get("/my-groups", async (req, res) => {
+
+  if (!req.session.usuario) {
+    return res.status(401).json({ erro: "Não autenticado" });
+  }
+
+  const usuario_id = req.session.usuario.id;
+
+  try {
+
+    const result = await pool.query(
+      `
+      SELECT g.id, g.name, g.code
+      FROM groups g
+      JOIN group_members gm ON gm.group_id = g.id
+      WHERE gm.user_id = $1
+      `,
+      [usuario_id]
+    );
+
+    res.json(result.rows);
+
+  } catch (erro) {
+    console.error("Erro ao buscar grupos:", erro);
+    res.status(500).json({ erro: "Erro no servidor" });
+  }
+
 });
 
 app.listen(PORT, () => {
