@@ -142,7 +142,20 @@ app.get("/apostas/:usuarioId", async (req, res) => {
 
   try {
     const resultado = await pool.query(
-      "SELECT * FROM apostas WHERE usuario_id = $1",
+      `
+      SELECT 
+        a.id,
+        a.usuario_id,
+        a.jogo_id,
+        a.gols_casa,
+        a.gols_fora,
+        a.pontos,
+        j.jogo,
+        j.data_jogo
+      FROM apostas a
+      JOIN jogos j ON a.jogo_id = j.id
+      WHERE a.usuario_id = $1
+      `,
       [usuarioId]
     );
 
@@ -242,14 +255,14 @@ app.post("/apostar", async (req, res) => {
   }
 
   const usuario_id = req.session.usuario.id;
-  const { jogo, gols_casa, gols_fora } = req.body;
+  const { jogo_id, gols_casa, gols_fora } = req.body;
 
   try {
 
-    // 🔎 1️⃣ Buscar data do jogo
+    // 🔎 Buscar data pelo ID
     const jogoResult = await pool.query(
-      `SELECT data_jogo FROM jogos WHERE jogo = $1`,
-      [jogo]
+      `SELECT data_jogo FROM jogos WHERE id = $1`,
+      [jogo_id]
     );
 
     if (jogoResult.rows.length === 0) {
@@ -259,24 +272,23 @@ app.post("/apostar", async (req, res) => {
     const dataJogo = new Date(jogoResult.rows[0].data_jogo);
     const agora = new Date();
 
-    // 🔒 2️⃣ Bloquear se já começou
     if (agora >= dataJogo) {
       return res.status(403).json({
-        erro: "Este jogo já começou. Não é possível alterar a aposta."
+        erro: "Este jogo já começou."
       });
     }
 
-    // 3️⃣ Salvar aposta se estiver liberado
+    // 🔥 Agora salva usando jogo_id
     await pool.query(
       `
-      INSERT INTO apostas (usuario_id, jogo, gols_casa, gols_fora)
+      INSERT INTO apostas (usuario_id, jogo_id, gols_casa, gols_fora)
       VALUES ($1, $2, $3, $4)
-      ON CONFLICT (usuario_id, jogo)
+      ON CONFLICT (usuario_id, jogo_id)
       DO UPDATE SET
         gols_casa = EXCLUDED.gols_casa,
         gols_fora = EXCLUDED.gols_fora
       `,
-      [usuario_id, jogo, gols_casa, gols_fora]
+      [usuario_id, jogo_id, gols_casa, gols_fora]
     );
 
     res.json({ sucesso: true });
@@ -294,7 +306,7 @@ app.post("/calcular-pontos/:usuarioId", async (req, res) => {
 
     // 1️⃣ Buscar apostas do usuário
     const apostasResult = await pool.query(
-      "SELECT * FROM apostas WHERE usuario_id = $1",
+      `SELECT * FROM apostas WHERE usuario_id = $1`,
       [usuarioId]
     );
 
@@ -304,10 +316,10 @@ app.post("/calcular-pontos/:usuarioId", async (req, res) => {
 
     for (let aposta of apostas) {
 
-      // 2️⃣ Buscar resultado oficial do jogo
+      // 2️⃣ Buscar resultado oficial pelo jogo_id
       const jogoOficialResult = await pool.query(
-        "SELECT * FROM jogos_oficiais WHERE jogo = $1",
-        [aposta.jogo]
+        `SELECT * FROM jogos_oficiais WHERE jogo_id = $1`,
+        [aposta.jogo_id]
       );
 
       if (jogoOficialResult.rows.length === 0) continue;
@@ -318,22 +330,24 @@ app.post("/calcular-pontos/:usuarioId", async (req, res) => {
 
       totalPontos += pontos;
 
-      // salvar pontos na aposta
+      // 🔥 Atualiza pontos da aposta usando ID (não texto)
       await pool.query(
-        "UPDATE apostas SET pontos = $1 WHERE usuario_id = $2 AND jogo = $3",
-        [pontos, usuarioId, aposta.jogo]
+        `UPDATE apostas 
+         SET pontos = $1 
+         WHERE id = $2`,
+        [pontos, aposta.id]
       );
     }
 
     // ===== ARTIHEIRO =====
 
     const apostasArtilheiroResult = await pool.query(
-      "SELECT * FROM aposta_artilheiro WHERE usuario_id = $1",
+      `SELECT * FROM aposta_artilheiro WHERE usuario_id = $1`,
       [usuarioId]
     );
 
     const artilheiroOficialResult = await pool.query(
-      "SELECT artilheiro_oficial FROM configuracoes LIMIT 1"
+      `SELECT artilheiro_oficial FROM configuracoes LIMIT 1`
     );
 
     if (artilheiroOficialResult.rows.length > 0) {
@@ -354,7 +368,7 @@ app.post("/calcular-pontos/:usuarioId", async (req, res) => {
 
     // 3️⃣ Atualizar pontuação no usuário
     await pool.query(
-      "UPDATE usuarios SET pontos = $1 WHERE id = $2",
+      `UPDATE usuarios SET pontos = $1 WHERE id = $2`,
       [totalPontos, usuarioId]
     );
 
@@ -601,58 +615,81 @@ app.get("/my-groups", async (req, res) => {
 
 //ABA BRASIL
 app.post("/salvar-jogadores", async (req, res) => {
-    const { aposta_id, jogadores } = req.body;
+  const { aposta_id, jogadores } = req.body;
 
-    try {
+  try {
 
-        // 1️⃣ Buscar aposta
-        const resultado = await pool.query(
-            "SELECT * FROM apostas WHERE id = $1",
-            [aposta_id]
-        );
+    // 1️⃣ Buscar aposta
+    const apostaResult = await pool.query(
+      `SELECT * FROM apostas WHERE id = $1`,
+      [aposta_id]
+    );
 
-        if (resultado.rows.length === 0) {
-            return res.status(404).json({ erro: "Aposta não encontrada" });
-        }
-
-        const aposta = resultado.rows[0];
-
-        // 2️⃣ Descobrir gols do Brasil
-        let golsBrasil;
-
-        if (aposta.jogo.startsWith("Brasil")) {
-            golsBrasil = aposta.gols_casa;
-        } else {
-            golsBrasil = aposta.gols_fora;
-        }
-
-        // 3️⃣ Validar quantidade
-        if (jogadores.length !== golsBrasil) {
-            return res.status(400).json({
-                erro: "Quantidade de jogadores inválida"
-            });
-        }
-
-        // 4️⃣ Apagar jogadores antigos dessa aposta (evita duplicar)
-        await pool.query(
-            "DELETE FROM aposta_jogadores WHERE aposta_id = $1",
-            [aposta_id]
-        );
-
-        // 5️⃣ Inserir novos jogadores
-        for (const jogador of jogadores) {
-            await pool.query(
-                "INSERT INTO aposta_jogadores (aposta_id, jogador_nome) VALUES ($1, $2)",
-                [aposta_id, jogador]
-            );
-        }
-
-        res.json({ sucesso: true });
-
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ erro: "Erro ao salvar jogadores" });
+    if (apostaResult.rows.length === 0) {
+      return res.status(404).json({ erro: "Aposta não encontrada" });
     }
+
+    const aposta = apostaResult.rows[0];
+
+    // 2️⃣ Buscar o jogo pelo jogo_id
+    const jogoResult = await pool.query(
+      `SELECT * FROM jogos WHERE id = $1`,
+      [aposta.jogo_id]
+    );
+
+    if (jogoResult.rows.length === 0) {
+      return res.status(404).json({ erro: "Jogo não encontrado" });
+    }
+
+    const jogo = jogoResult.rows[0];
+
+    // 3️⃣ Descobrir gols do Brasil
+    let golsBrasil;
+
+    if (jogo.jogo.startsWith("Brasil")) {
+      golsBrasil = aposta.gols_casa;
+    } else {
+      golsBrasil = aposta.gols_fora;
+    }
+
+    // 4️⃣ Validar quantidade
+    if (jogadores.length !== golsBrasil) {
+      return res.status(400).json({
+        erro: "Quantidade de jogadores inválida"
+      });
+    }
+
+    // 🔒 5️⃣ BLOQUEAR se jogo já começou
+    const agora = new Date();
+    const dataJogo = new Date(jogo.data_jogo);
+
+    if (agora >= dataJogo) {
+      return res.status(403).json({
+        erro: "Este jogo já começou. Não é possível alterar jogadores."
+      });
+    }
+
+    // 6️⃣ Apagar jogadores antigos
+    await pool.query(
+      `DELETE FROM aposta_jogadores WHERE aposta_id = $1`,
+      [aposta_id]
+    );
+
+    // 7️⃣ Inserir novos jogadores
+    for (const jogador of jogadores) {
+      await pool.query(
+        `INSERT INTO aposta_jogadores (aposta_id, jogador_nome)
+         VALUES ($1, $2)`,
+        [aposta_id, jogador]
+      );
+    }
+
+    res.json({ sucesso: true });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ erro: "Erro ao salvar jogadores" });
+  }
 });
 
 // ABA BRASIL - LISTAR JOGOS DO USUÁRIO
@@ -661,7 +698,13 @@ app.get("/jogos-brasil/:usuarioId", async (req, res) => {
 
   try {
     const resultado = await pool.query(
-      "SELECT * FROM apostas WHERE usuario_id = $1 AND jogo ILIKE '%Brasil%'",
+      `
+      SELECT a.*, j.jogo, j.data_jogo
+      FROM apostas a
+      JOIN jogos j ON a.jogo_id = j.id
+      WHERE a.usuario_id = $1
+      AND j.jogo ILIKE '%Brasil%'
+      `,
       [usuarioId]
     );
 

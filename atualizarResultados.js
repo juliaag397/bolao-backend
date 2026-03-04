@@ -7,9 +7,9 @@ async function atualizar() {
     UPDATE jogos
     SET gols_casa = $1,
         gols_fora = $2
-    WHERE jogo = $3
+    WHERE id = $3
     `,
-    [3, 0, 'México x África do Sul - 11/06']
+    [3, 0, 1] // ← coloca o ID real do jogo aqui
   );
 
   console.log("Resultado atualizado!");

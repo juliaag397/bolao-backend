@@ -1,7 +1,6 @@
 require("dotenv").config();
 const pool = require("./db");
 
-// ⚽ mesma lógica que você usa no backend
 function calcularPontos(aposta, jogoOficial) {
   const golsApostaCasa = aposta.gols_casa;
   const golsApostaFora = aposta.gols_fora;
@@ -9,7 +8,6 @@ function calcularPontos(aposta, jogoOficial) {
   const golsOficialCasa = jogoOficial.gols_casa;
   const golsOficialFora = jogoOficial.gols_fora;
 
-  // 🔥 1️⃣ Placar exato
   if (
     golsApostaCasa === golsOficialCasa &&
     golsApostaFora === golsOficialFora
@@ -17,7 +15,6 @@ function calcularPontos(aposta, jogoOficial) {
     return 10;
   }
 
-  // Resultado da aposta
   const resultadoAposta =
     golsApostaCasa > golsApostaFora
       ? "casa"
@@ -25,7 +22,6 @@ function calcularPontos(aposta, jogoOficial) {
       ? "fora"
       : "empate";
 
-  // Resultado oficial
   const resultadoOficial =
     golsOficialCasa > golsOficialFora
       ? "casa"
@@ -33,28 +29,22 @@ function calcularPontos(aposta, jogoOficial) {
       ? "fora"
       : "empate";
 
-  // 🔥 2️⃣ Se acertou vencedor ou empate
   if (resultadoAposta === resultadoOficial) {
 
-    // 👉 Se for empate
     if (resultadoOficial === "empate") {
-      return 3; // Empate simples (já sabemos que não foi placar exato)
+      return 3;
     }
 
-    // 👉 Se for vitória (casa ou fora)
     const diferencaAposta = Math.abs(golsApostaCasa - golsApostaFora);
     const diferencaOficial = Math.abs(golsOficialCasa - golsOficialFora);
 
-    // 🔥 Vencedor + diferença correta
     if (diferencaAposta === diferencaOficial) {
       return 6;
     }
 
-    // 🔥 Vencedor seco
     return 4;
   }
 
-  // ❌ Errou tudo
   return 0;
 }
 
@@ -63,7 +53,9 @@ async function recalcular() {
     console.log("🔄 Recalculando pontuação...");
 
     // 1️⃣ Buscar todos usuários
-    const usuariosResult = await pool.query("SELECT id, nome FROM usuarios");
+    const usuariosResult = await pool.query(
+      "SELECT id, nome FROM usuarios"
+    );
     const usuarios = usuariosResult.rows;
 
     for (let usuario of usuarios) {
@@ -78,10 +70,11 @@ async function recalcular() {
       const apostas = apostasResult.rows;
 
       for (let aposta of apostas) {
-        // 3️⃣ Buscar resultado oficial
+
+        // 🔥 Buscar resultado oficial usando jogo_id
         const jogoOficialResult = await pool.query(
-          "SELECT * FROM jogos_oficiais WHERE jogo = $1",
-          [aposta.jogo]
+          "SELECT * FROM jogos_oficiais WHERE jogo_id = $1",
+          [aposta.jogo_id]
         );
 
         if (jogoOficialResult.rows.length === 0) continue;
@@ -90,17 +83,16 @@ async function recalcular() {
 
         const pontosJogo = calcularPontos(aposta, jogoOficial);
 
-        // 🔥 Salva os pontos individuais da aposta
+        // Atualiza pontos da aposta
         await pool.query(
           "UPDATE apostas SET pontos = $1 WHERE id = $2",
           [pontosJogo, aposta.id]
         );
 
-        // 🔥 Soma no total do usuário
         totalPontos += pontosJogo;
       }
 
-      // 4️⃣ Atualizar pontos no banco
+      // Atualiza total do usuário
       await pool.query(
         "UPDATE usuarios SET pontos = $1 WHERE id = $2",
         [totalPontos, usuario.id]
