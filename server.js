@@ -13,6 +13,9 @@ pool.query("SELECT NOW()")
   });
 
 const express = require("express");
+
+app.set("trust proxy", 1);
+
 const cors = require("cors");
 
 const app = express();
@@ -25,8 +28,6 @@ app.use(cors({
 }));
 
 app.use(express.json());
-
-app.set("trust proxy", 1);
 
 const session = require("express-session");
 const pgSession = require("connect-pg-simple")(session);
