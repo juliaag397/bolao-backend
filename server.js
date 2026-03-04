@@ -599,6 +599,52 @@ app.get("/my-groups", async (req, res) => {
 
 });
 
+//ABA BRASIL
+app.post("/salvar-jogadores", async (req, res) => {
+
+    const { aposta_id, jogadores } = req.body;
+
+    // 1️⃣ Buscar aposta
+    const { data: aposta, error } = await supabase
+        .from("apostas")
+        .select("*")
+        .eq("id", aposta_id)
+        .single();
+
+    if (error || !aposta) {
+        return res.status(404).json({ erro: "Aposta não encontrada" });
+    }
+
+    // 2️⃣ Descobrir gols do Brasil
+    let golsBrasil;
+
+    if (aposta.jogo.startsWith("Brasil")) {
+        golsBrasil = aposta.gols_casa;
+    } else {
+        golsBrasil = aposta.gols_fora;
+    }
+
+    // 3️⃣ Validar quantidade
+    if (jogadores.length !== golsBrasil) {
+        return res.status(400).json({
+            erro: "Quantidade de jogadores inválida"
+        });
+    }
+
+    // 4️⃣ Salvar no banco
+    const inserts = jogadores.map(jogador => ({
+        aposta_id,
+        jogador_nome: jogador
+    }));
+
+    await supabase
+        .from("aposta_jogadores")
+        .insert(inserts);
+
+    res.json({ sucesso: true });
+
+});
+
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
