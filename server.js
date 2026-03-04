@@ -14,11 +14,11 @@ pool.query("SELECT NOW()")
 
 const express = require("express");
 
-app.set("trust proxy", 1);
-
 const cors = require("cors");
 
 const app = express();
+
+app.set("trust proxy", 1);
 
 app.use(cors({
   origin: true,
