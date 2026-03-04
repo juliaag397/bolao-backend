@@ -601,67 +601,76 @@ app.get("/my-groups", async (req, res) => {
 
 //ABA BRASIL
 app.post("/salvar-jogadores", async (req, res) => {
-
     const { aposta_id, jogadores } = req.body;
 
-    // 1️⃣ Buscar aposta
-    const { data: aposta, error } = await supabase
-        .from("apostas")
-        .select("*")
-        .eq("id", aposta_id)
-        .single();
+    try {
 
-    if (error || !aposta) {
-        return res.status(404).json({ erro: "Aposta não encontrada" });
+        // 1️⃣ Buscar aposta
+        const resultado = await pool.query(
+            "SELECT * FROM apostas WHERE id = $1",
+            [aposta_id]
+        );
+
+        if (resultado.rows.length === 0) {
+            return res.status(404).json({ erro: "Aposta não encontrada" });
+        }
+
+        const aposta = resultado.rows[0];
+
+        // 2️⃣ Descobrir gols do Brasil
+        let golsBrasil;
+
+        if (aposta.jogo.startsWith("Brasil")) {
+            golsBrasil = aposta.gols_casa;
+        } else {
+            golsBrasil = aposta.gols_fora;
+        }
+
+        // 3️⃣ Validar quantidade
+        if (jogadores.length !== golsBrasil) {
+            return res.status(400).json({
+                erro: "Quantidade de jogadores inválida"
+            });
+        }
+
+        // 4️⃣ Apagar jogadores antigos dessa aposta (evita duplicar)
+        await pool.query(
+            "DELETE FROM aposta_jogadores WHERE aposta_id = $1",
+            [aposta_id]
+        );
+
+        // 5️⃣ Inserir novos jogadores
+        for (const jogador of jogadores) {
+            await pool.query(
+                "INSERT INTO aposta_jogadores (aposta_id, jogador_nome) VALUES ($1, $2)",
+                [aposta_id, jogador]
+            );
+        }
+
+        res.json({ sucesso: true });
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ erro: "Erro ao salvar jogadores" });
     }
-
-    // 2️⃣ Descobrir gols do Brasil
-    let golsBrasil;
-
-    if (aposta.jogo.startsWith("Brasil")) {
-        golsBrasil = aposta.gols_casa;
-    } else {
-        golsBrasil = aposta.gols_fora;
-    }
-
-    // 3️⃣ Validar quantidade
-    if (jogadores.length !== golsBrasil) {
-        return res.status(400).json({
-            erro: "Quantidade de jogadores inválida"
-        });
-    }
-
-    // 4️⃣ Salvar no banco
-    const inserts = jogadores.map(jogador => ({
-        aposta_id,
-        jogador_nome: jogador
-    }));
-
-    await supabase
-        .from("aposta_jogadores")
-        .insert(inserts);
-
-    res.json({ sucesso: true });
-
 });
 
 // ABA BRASIL - LISTAR JOGOS DO USUÁRIO
-app.get("/jogos-brasil/:usuario_id", async (req, res) => {
+app.get("/jogos-brasil/:usuarioId", async (req, res) => {
+  const { usuarioId } = req.params;
 
-    const { usuario_id } = req.params;
+  try {
+    const resultado = await pool.query(
+      "SELECT * FROM apostas WHERE usuario_id = $1 AND jogo ILIKE '%Brasil%'",
+      [usuarioId]
+    );
 
-    // Buscar apostas do usuário que tenham Brasil no jogo
-    const { data, error } = await supabase
-        .from("apostas")
-        .select("*")
-        .eq("usuario_id", usuario)
-        .ilike("jogo", "%Brasil%");
+    res.json(resultado.rows);
 
-    if (error) {
-        return res.status(500).json({ erro: "Erro ao buscar jogos" });
-    }
-
-    res.json(data);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ erro: "Erro ao buscar jogos do Brasil" });
+  }
 });
 
 app.listen(PORT, () => {
