@@ -21,7 +21,7 @@ const app = express();
 app.set("trust proxy", 1);
 
 app.use(cors({
-  origin: true,
+  origin: "https://bolao-frontend-cgn0k5zy-juliaag397s-projects.vercel.app",
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type"]
