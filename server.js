@@ -694,19 +694,28 @@ app.post("/salvar-jogadores", async (req, res) => {
 
 // ABA BRASIL - LISTAR JOGOS DO USUÁRIO
 app.get("/jogos-brasil/:usuarioId", async (req, res) => {
+
   const { usuarioId } = req.params;
 
   try {
-    const resultado = await pool.query(
-      `
-      SELECT a.*, j.jogo, j.data_jogo
+
+    const resultado = await pool.query(`
+      SELECT 
+        a.id,
+        a.jogo_id,
+        j.jogo,
+        a.gols_casa,
+        a.gols_fora,
+        CASE 
+          WHEN j.time_casa = 'Brasil' THEN a.gols_casa
+          ELSE a.gols_fora
+        END AS gols_brasil
       FROM apostas a
-      JOIN jogos j ON a.jogo_id = j.id
+      JOIN jogos j ON j.id = a.jogo_id
       WHERE a.usuario_id = $1
-      AND j.jogo ILIKE '%Brasil%'
-      `,
-      [usuarioId]
-    );
+        AND (j.time_casa = 'Brasil' OR j.time_fora = 'Brasil')
+      ORDER BY j.data
+    `, [usuarioId]);
 
     res.json(resultado.rows);
 
@@ -714,6 +723,7 @@ app.get("/jogos-brasil/:usuarioId", async (req, res) => {
     console.error(error);
     res.status(500).json({ erro: "Erro ao buscar jogos do Brasil" });
   }
+
 });
 
 app.listen(PORT, () => {
