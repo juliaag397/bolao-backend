@@ -538,7 +538,7 @@ app.get("/my-groups", async (req, res) => {
 
     const result = await pool.query(
       `
-      SELECT g.id, g.name, g.code
+      SELECT g.id, g.name, g.code, g.rules
       FROM groups g
       JOIN group_members gm ON gm.group_id = g.id
       WHERE gm.user_id = $1
