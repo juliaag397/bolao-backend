@@ -248,7 +248,7 @@ app.post("/apostar", async (req, res) => {
 
     // 🔎 1️⃣ Buscar data do jogo
     const jogoResult = await pool.query(
-      `SELECT data_jogo FROM jogos WHERE id = $1`,
+      `SELECT data_jogo FROM jogos WHERE jogo = $1`,
       [jogo]
     );
 
@@ -403,7 +403,7 @@ app.get("/minha-pontuacao", async (req, res) => {
 });
 
 app.get("/jogos", async (req, res) => {
-  const result = await pool.query("SELECT * FROM jogos_oficiais");
+  const result = await pool.query("SELECT * FROM jogos");
   res.json(result.rows);
 });
 

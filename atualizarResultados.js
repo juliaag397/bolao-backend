@@ -4,7 +4,7 @@ async function atualizar() {
 
   await pool.query(
     `
-    UPDATE jogos_oficiais
+    UPDATE jogos
     SET gols_casa = $1,
         gols_fora = $2
     WHERE jogo = $3
