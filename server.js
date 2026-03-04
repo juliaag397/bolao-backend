@@ -419,7 +419,29 @@ app.post("/create-group", async (req, res) => {
   const { name, rules } = req.body;
   const userId = req.session.usuario.id;
 
+  // 🚨 VALIDAÇÃO BACKEND (OBRIGATÓRIA)
+  if (!name || name.trim() === "") {
+    return res.status(400).json({
+      error: "O nome do grupo é obrigatório."
+    });
+  }
+
+  if (!rules || rules.trim() === "") {
+    return res.status(400).json({
+      error: "As regras do grupo são obrigatórias."
+    });
+  }
+
+  if (name.trim().length < 3) {
+    return res.status(400).json({
+      error: "O nome deve ter pelo menos 3 caracteres."
+    });
+  }
+
   try {
+
+    const cleanName = name.trim();
+    const cleanRules = rules.trim();
 
     // 🔐 gerar código seguro
     const code = await gerarCodigoUnico();
@@ -431,7 +453,7 @@ app.post("/create-group", async (req, res) => {
       VALUES ($1, $2, $3, $4)
       RETURNING id, code
       `,
-      [name, rules, code, userId]
+      [cleanName, cleanRules, code, userId]
     );
 
     const group = groupResult.rows[0];
