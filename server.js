@@ -726,6 +726,29 @@ app.get("/jogos-brasil/:usuarioId", async (req, res) => {
 
 });
 
+app.get("/jogadores/:aposta_id", async (req, res) => {
+
+  const { aposta_id } = req.params;
+
+  try {
+
+    const result = await pool.query(
+      `SELECT jogador 
+       FROM jogadores_aposta
+       WHERE aposta_id = $1
+       ORDER BY id`,
+      [aposta_id]
+    );
+
+    res.json(result.rows);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: "Erro ao buscar jogadores" });
+  }
+
+});
+
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
