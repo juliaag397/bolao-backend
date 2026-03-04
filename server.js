@@ -707,13 +707,13 @@ app.get("/jogos-brasil/:usuarioId", async (req, res) => {
         a.gols_casa,
         a.gols_fora,
         CASE 
-          WHEN j.time_casa = 'Brasil' THEN a.gols_casa
+          WHEN j.jogo LIKE 'Brasil x%' THEN a.gols_casa
           ELSE a.gols_fora
         END AS gols_brasil
       FROM apostas a
       JOIN jogos j ON j.id = a.jogo_id
       WHERE a.usuario_id = $1
-        AND (j.time_casa = 'Brasil' OR j.time_fora = 'Brasil')
+      AND j.jogo ILIKE '%Brasil%'
       ORDER BY j.data_jogo
     `, [usuarioId]);
 
