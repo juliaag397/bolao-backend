@@ -386,6 +386,30 @@ app.get("/jogos", async (req, res) => {
 });
 
   // grupos
+
+const crypto = require("crypto");
+
+async function gerarCodigoUnico() {
+  while (true) {
+
+    // gera código forte criptograficamente
+    const code = crypto.randomBytes(4)
+      .toString("base64")
+      .replace(/[^A-Z0-9]/gi, "")
+      .substring(0, 6)
+      .toUpperCase();
+
+    const check = await pool.query(
+      "SELECT id FROM groups WHERE code = $1",
+      [code]
+    );
+
+    if (check.rows.length === 0) {
+      return code;
+    }
+  }
+}
+
 app.post("/create-group", async (req, res) => {
 
   if (!req.session.usuario) {
@@ -397,14 +421,17 @@ app.post("/create-group", async (req, res) => {
 
   try {
 
+    // 🔐 gerar código seguro
+    const code = await gerarCodigoUnico();
+
     // 1️⃣ Criar grupo
     const groupResult = await pool.query(
       `
-      INSERT INTO groups (name, rules, created_by)
-      VALUES ($1, $2, $3)
+      INSERT INTO groups (name, rules, code, created_by)
+      VALUES ($1, $2, $3, $4)
       RETURNING id, code
       `,
-      [name, rules, userId]
+      [name, rules, code, userId]
     );
 
     const group = groupResult.rows[0];
