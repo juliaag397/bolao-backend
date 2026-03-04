@@ -645,6 +645,25 @@ app.post("/salvar-jogadores", async (req, res) => {
 
 });
 
+// ABA BRASIL - LISTAR JOGOS DO USUÁRIO
+app.get("/jogos-brasil/:usuario", async (req, res) => {
+
+    const { usuario } = req.params;
+
+    // Buscar apostas do usuário que tenham Brasil no jogo
+    const { data, error } = await supabase
+        .from("apostas")
+        .select("*")
+        .eq("usuario", usuario)
+        .ilike("jogo", "%Brasil%");
+
+    if (error) {
+        return res.status(500).json({ erro: "Erro ao buscar jogos" });
+    }
+
+    res.json(data);
+});
+
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
