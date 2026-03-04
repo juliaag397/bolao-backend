@@ -53,7 +53,8 @@ app.use(session({
   proxy: true,
   cookie: {
     secure: true,
-    sameSite: "lax"
+    sameSite: "none",
+    httpOnly: true
   }
 }));
 
