@@ -714,7 +714,7 @@ app.get("/jogos-brasil/:usuarioId", async (req, res) => {
       JOIN jogos j ON j.id = a.jogo_id
       WHERE a.usuario_id = $1
         AND (j.time_casa = 'Brasil' OR j.time_fora = 'Brasil')
-      ORDER BY j.data
+      ORDER BY j.data_jogo
     `, [usuarioId]);
 
     res.json(resultado.rows);
