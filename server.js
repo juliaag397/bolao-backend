@@ -245,6 +245,28 @@ app.post("/apostar", async (req, res) => {
   const { jogo, gols_casa, gols_fora } = req.body;
 
   try {
+
+    // 🔎 1️⃣ Buscar data do jogo
+    const jogoResult = await pool.query(
+      `SELECT data_jogo FROM jogos WHERE id = $1`,
+      [jogo]
+    );
+
+    if (jogoResult.rows.length === 0) {
+      return res.status(404).json({ erro: "Jogo não encontrado" });
+    }
+
+    const dataJogo = new Date(jogoResult.rows[0].data_jogo);
+    const agora = new Date();
+
+    // 🔒 2️⃣ Bloquear se já começou
+    if (agora >= dataJogo) {
+      return res.status(403).json({
+        erro: "Este jogo já começou. Não é possível alterar a aposta."
+      });
+    }
+
+    // 3️⃣ Salvar aposta se estiver liberado
     await pool.query(
       `
       INSERT INTO apostas (usuario_id, jogo, gols_casa, gols_fora)
