@@ -646,15 +646,15 @@ app.post("/salvar-jogadores", async (req, res) => {
 });
 
 // ABA BRASIL - LISTAR JOGOS DO USUÁRIO
-app.get("/jogos-brasil/:usuario", async (req, res) => {
+app.get("/jogos-brasil/:usuario_id", async (req, res) => {
 
-    const { usuario } = req.params;
+    const { usuario_id } = req.params;
 
     // Buscar apostas do usuário que tenham Brasil no jogo
     const { data, error } = await supabase
         .from("apostas")
         .select("*")
-        .eq("usuario", usuario)
+        .eq("usuario_id", usuario)
         .ilike("jogo", "%Brasil%");
 
     if (error) {
