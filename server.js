@@ -733,8 +733,8 @@ app.get("/jogadores/:aposta_id", async (req, res) => {
   try {
 
     const result = await pool.query(
-      `SELECT jogador 
-       FROM jogadores_aposta
+      `SELECT jogador_nome
+       FROM aposta_jogadores
        WHERE aposta_id = $1
        ORDER BY id`,
       [aposta_id]
