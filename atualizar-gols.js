@@ -2,7 +2,7 @@ const pool = require("./db");
 
 async function atualizar() {
 
-  const jogoId = 1;
+  const jogoId = 52;
 
   // apaga gols antigos
   await pool.query(
@@ -13,6 +13,7 @@ async function atualizar() {
   // adiciona gols reais
   const gols = [
     "Neymar",
+    "Vinicius Jr",
     "Vinicius Jr",
     "Vinicius Jr"
   ];
