@@ -321,7 +321,6 @@ app.post("/calcular-pontos/:usuarioId", async (req, res) => {
 
   try {
 
-    // 1️⃣ Buscar apostas do usuário
     const apostasResult = await pool.query(
       `SELECT * FROM apostas WHERE usuario_id = $1`,
       [usuarioId]
@@ -333,7 +332,6 @@ app.post("/calcular-pontos/:usuarioId", async (req, res) => {
 
     for (let aposta of apostas) {
 
-      // 2️⃣ Buscar resultado oficial pelo jogo_id
       const jogoOficialResult = await pool.query(
         `SELECT * FROM jogos_oficiais WHERE jogo_id = $1`,
         [aposta.jogo_id]
@@ -347,7 +345,6 @@ app.post("/calcular-pontos/:usuarioId", async (req, res) => {
 
       totalPontos += pontos;
 
-      // 🔥 Atualiza pontos da aposta usando ID (não texto)
       await pool.query(
         `UPDATE apostas 
          SET pontos = $1 
@@ -383,7 +380,24 @@ app.post("/calcular-pontos/:usuarioId", async (req, res) => {
       }
     }
 
-    // 3️⃣ Atualizar pontuação no usuário
+    // ===== PONTOS DOS JOGADORES =====
+
+    const pontosJogadoresResult = await pool.query(
+      `
+      SELECT SUM(aj.pontos) AS total
+      FROM aposta_jogadores aj
+      JOIN apostas a ON a.id = aj.aposta_id
+      WHERE a.usuario_id = $1
+      `,
+      [usuarioId]
+    );
+
+    const pontosJogadores = pontosJogadoresResult.rows[0].total || 0;
+
+    totalPontos += Number(pontosJogadores);
+
+    // ===== ATUALIZA USUÁRIO =====
+
     await pool.query(
       `UPDATE usuarios SET pontos = $1 WHERE id = $2`,
       [totalPontos, usuarioId]
