@@ -125,11 +125,14 @@ app.post("/login", async (req, res) => {
       nome: usuario.nome
     };
 
-    res.json({
-      sucesso: true,
-      id: usuario.id,
-      nome: usuario.nome
-    });
+    req.session.save(() => {
+      res.json({
+        sucesso: true,
+        id: usuario.id,
+        nome: usuario.nome
+      });
+    })
+
 
   } catch (error) {
     console.error(error);
