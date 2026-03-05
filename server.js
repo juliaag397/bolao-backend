@@ -737,22 +737,37 @@ app.get("/jogos-brasil/:usuarioId", async (req, res) => {
         j.jogo,
         a.gols_casa,
         a.gols_fora,
-        a.pontos_jogadores,
+
+        COALESCE(SUM(aj.pontos),0) AS pontos_jogadores,
+
         CASE 
           WHEN j.jogo LIKE 'Brasil x%' THEN a.gols_casa
           ELSE a.gols_fora
         END AS gols_brasil
+
       FROM apostas a
       JOIN jogos j ON j.id = a.jogo_id
+      LEFT JOIN aposta_jogadores aj
+        ON aj.aposta_id = a.id
+
       WHERE a.usuario_id = $1
       AND j.jogo ILIKE '%Brasil%'
+
+      GROUP BY 
+        a.id,
+        a.jogo_id,
+        j.jogo,
+        a.gols_casa,
+        a.gols_fora,
+        j.data_jogo
+
       ORDER BY j.data_jogo
     `, [usuarioId]);
 
     res.json(resultado.rows);
 
   } catch (error) {
-    console.error(error);
+    console.error("ERRO /jogos-brasil:", error);
     res.status(500).json({ erro: "Erro ao buscar jogos do Brasil" });
   }
 
