@@ -818,6 +818,28 @@ app.get("/gols-brasil/:jogo_id", async (req, res) => {
 
 });
 
+app.get("/pontos-jogadores/:aposta_id", async (req, res) => {
+
+  const { aposta_id } = req.params;
+
+  try {
+
+    const result = await pool.query(
+      `SELECT COALESCE(SUM(pontos),0) AS pontos
+       FROM aposta_jogadores
+       WHERE aposta_id = $1`,
+      [aposta_id]
+    );
+
+    res.json(result.rows[0]);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: "Erro ao buscar pontos" });
+  }
+
+});
+
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
