@@ -43,6 +43,7 @@ const session = require("express-session");
 const pgSession = require("connect-pg-simple")(session);
 
 app.use(session({
+  name: "bolao.sid",
   store: new pgSession({
     pool: pool,
     tableName: "user_sessions"
@@ -54,7 +55,8 @@ app.use(session({
   cookie: {
     secure: true,
     sameSite: "none",
-    httpOnly: true
+    httpOnly: true,
+    maxAge: 1000 * 60 * 60 * 24 * 7
   }
 }));
 
