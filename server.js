@@ -766,6 +766,28 @@ app.get("/jogadores/:aposta_id", async (req, res) => {
 
 });
 
+app.get("/gols-brasil/:jogo_id", async (req, res) => {
+
+  const { jogo_id } = req.params;
+
+  try {
+
+    const result = await pool.query(
+      `SELECT jogador_nome
+       FROM gols_brasil
+       WHERE jogo_id = $1`,
+      [jogo_id]
+    );
+
+    res.json(result.rows);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: "Erro ao buscar gols" });
+  }
+
+});
+
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
