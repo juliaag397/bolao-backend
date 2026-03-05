@@ -723,6 +723,7 @@ app.get("/jogos-brasil/:usuarioId", async (req, res) => {
         j.jogo,
         a.gols_casa,
         a.gols_fora,
+        a.pontos_jogadores,
         CASE 
           WHEN j.jogo LIKE 'Brasil x%' THEN a.gols_casa
           ELSE a.gols_fora
