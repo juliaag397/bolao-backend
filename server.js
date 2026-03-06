@@ -293,6 +293,27 @@ app.get("/pontos-artilheiro", async (req, res) => {
 
 });
 
+app.get("/resultado-artilheiro", async (req, res) => {
+
+  try {
+
+    const result = await pool.query(
+      `SELECT artilheiro_oficial, gols_artilheiro
+       FROM configuracoes
+       LIMIT 1`
+    );
+
+    res.json(result.rows[0]);
+
+  } catch (error) {
+
+    console.error(error);
+    res.status(500).json({ erro: "Erro ao buscar resultado do artilheiro" });
+
+  }
+
+});
+
 app.get("/verificar-login", (req, res) => {
 
     if (req.session.usuario) {
