@@ -694,7 +694,7 @@ app.post("/salvar-jogadores", async (req, res) => {
     const agora = new Date();
     const dataJogo = new Date(jogo.data_jogo);
 
-    if (agora >= dataJogo) {
+    if (agora.getTime() >= dataJogo.getTime()) {
       return res.status(403).json({
         erro: "Este jogo já começou. Não é possível alterar jogadores."
       });
@@ -735,6 +735,7 @@ app.get("/jogos-brasil/:usuarioId", async (req, res) => {
         a.id,
         a.jogo_id,
         j.jogo,
+        j.data_jogo,
         a.gols_casa,
         a.gols_fora,
 
@@ -757,9 +758,9 @@ app.get("/jogos-brasil/:usuarioId", async (req, res) => {
         a.id,
         a.jogo_id,
         j.jogo,
+        j.data_jogo,
         a.gols_casa,
-        a.gols_fora,
-        j.data_jogo
+        a.gols_fora
 
       ORDER BY j.data_jogo
     `, [usuarioId]);

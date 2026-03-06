@@ -23,12 +23,12 @@ async function recalcularTudo() {
     // =========================
 
     await pool.query(`
-      UPDATE aposta_jogadores aj
-      SET pontos = 3
-      FROM gols_brasil g
-      JOIN apostas a ON a.id = aj.aposta_id
-      WHERE g.jogo_id = a.jogo_id
-      AND g.jogador_nome = aj.jogador_nome
+        UPDATE aposta_jogadores aj
+        SET pontos = 3
+        FROM apostas a, gols_brasil g
+        WHERE aj.aposta_id = a.id
+        AND g.jogo_id = a.jogo_id
+        AND g.jogador_nome = aj.jogador_nome
     `);
 
     console.log("⚽ Pontos de jogadores atualizados");
@@ -38,14 +38,16 @@ async function recalcularTudo() {
     // =========================
 
     const apostas = await pool.query(`
-      SELECT 
+    SELECT 
         a.id,
         a.gols_casa,
         a.gols_fora,
         j.gols_casa AS oficial_casa,
         j.gols_fora AS oficial_fora
-      FROM apostas a
-      JOIN jogos_oficiais j ON j.jogo_id = a.jogo_id
+    FROM apostas a
+    JOIN jogos j ON j.id = a.jogo_id
+    WHERE j.gols_casa IS NOT NULL
+    AND j.gols_fora IS NOT NULL
     `);
 
     for (let aposta of apostas.rows) {
@@ -119,35 +121,31 @@ async function recalcularTudo() {
     // =========================
 
     await pool.query(`
-      UPDATE usuarios u
-      SET pontos =
+    UPDATE usuarios u
+    SET pontos =
         COALESCE(a.total,0) +
         COALESCE(j.total,0) +
         COALESCE(ar.total,0)
-
-      FROM
-        (
-          SELECT usuario_id, SUM(pontos) total
-          FROM apostas
-          GROUP BY usuario_id
-        ) a
-
-      LEFT JOIN
-        (
-          SELECT a.usuario_id, SUM(aj.pontos) total
-          FROM aposta_jogadores aj
-          JOIN apostas a ON a.id = aj.aposta_id
-          GROUP BY a.usuario_id
-        ) j ON j.usuario_id = u.id
-
-      LEFT JOIN
-        (
-          SELECT usuario_id, SUM(pontos) total
-          FROM aposta_artilheiro
-          GROUP BY usuario_id
-        ) ar ON ar.usuario_id = u.id
-
-      WHERE u.id = a.usuario_id
+    FROM
+    (
+        SELECT usuario_id, SUM(pontos) AS total
+        FROM apostas
+        GROUP BY usuario_id
+    ) a
+    LEFT JOIN
+    (
+        SELECT a.usuario_id, SUM(aj.pontos) AS total
+        FROM aposta_jogadores aj
+        JOIN apostas a ON a.id = aj.aposta_id
+        GROUP BY a.usuario_id
+    ) j ON j.usuario_id = a.usuario_id
+    LEFT JOIN
+    (
+        SELECT usuario_id, SUM(pontos) AS total
+        FROM aposta_artilheiro
+        GROUP BY usuario_id
+    ) ar ON ar.usuario_id = a.usuario_id
+    WHERE u.id = a.usuario_id
     `);
 
     console.log("🏆 Ranking atualizado");

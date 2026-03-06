@@ -9,7 +9,7 @@ async function atualizar() {
         gols_fora = $2
     WHERE id = $3
     `,
-    [3, 0, 1] // ← coloca o ID real do jogo aqui
+    [0, 3, 1] // ← coloca o ID real do jogo aqui
   );
 
   console.log("Resultado atualizado!");
