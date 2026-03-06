@@ -267,6 +267,32 @@ app.get("/artilheiro-oficial", async (req, res) => {
 
 });
 
+app.get("/pontos-artilheiro", async (req, res) => {
+
+  if (!req.session.usuario) {
+    return res.status(401).json({ erro: "Não autenticado" });
+  }
+
+  const usuario_id = req.session.usuario.id;
+
+  try {
+
+    const result = await pool.query(
+      `SELECT COALESCE(SUM(pontos),0) AS pontos
+       FROM aposta_artilheiro
+       WHERE usuario_id = $1`,
+      [usuario_id]
+    );
+
+    res.json(result.rows[0]);
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ erro: "Erro ao buscar pontos do artilheiro" });
+  }
+
+});
+
 app.get("/verificar-login", (req, res) => {
 
     if (req.session.usuario) {
