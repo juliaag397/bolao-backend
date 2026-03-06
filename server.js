@@ -248,6 +248,25 @@ app.get("/artilheiros", async (req, res) => {
 
 });
 
+app.get("/artilheiro-oficial", async (req, res) => {
+
+  try {
+
+    const result = await pool.query(
+      `SELECT artilheiro_oficial FROM configuracoes WHERE id = 1`
+    );
+
+    res.json(result.rows[0]);
+
+  } catch (error) {
+
+    console.error(error);
+    res.status(500).json({ erro: "Erro ao buscar artilheiro oficial" });
+
+  }
+
+});
+
 app.get("/verificar-login", (req, res) => {
 
     if (req.session.usuario) {
