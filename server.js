@@ -907,6 +907,36 @@ app.get("/pontos-jogadores/:aposta_id", async (req, res) => {
 
 });
 
+  //PODIO
+app.post("/salvar-podio", async (req, res) => {
+    const { primeiro, segundo, terceiro } = req.body;
+    
+    // O id_usuario deve vir da sua sessão/cookie (req.user ou req.session)
+    const usuarioId = req.user?.id; 
+
+    if (!usuarioId) {
+        return res.status(401).json({ erro: "Não autorizado" });
+    }
+
+    try {
+        const { data, error } = await supabase
+            .from('apostas_podio') 
+            .upsert({ 
+                usuario_id: usuarioId, 
+                primeiro_lugar: primeiro, 
+                segundo_lugar: segundo, 
+                terceiro_lugar: terceiro 
+            }, { onConflict: 'usuario_id' });
+
+        if (error) throw error;
+
+        return res.json({ mensagem: "Sucesso!" });
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ erro: "Erro no banco de dados" });
+    }
+});
+
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
