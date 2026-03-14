@@ -943,6 +943,27 @@ app.post("/salvar-podio", async (req, res) => {
   }
 });
 
+app.get("/obter-podio", async (req, res) => {
+  if (!req.session.usuario) return res.status(401).json({ erro: "Não autenticado" });
+
+  const usuario_id = req.session.usuario.id;
+
+  try {
+    const result = await pool.query(
+      "SELECT primeiro_lugar, segundo_lugar, terceiro_lugar FROM apostas_podio WHERE usuario_id = $1",
+      [usuario_id]
+    );
+
+    if (result.rows.length > 0) {
+      res.json(result.rows[0]);
+    } else {
+      res.json(null); // Usuário novo, sem apostas
+    }
+  } catch (err) {
+    res.status(500).json({ erro: "Erro ao buscar pódio" });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
