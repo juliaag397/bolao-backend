@@ -117,6 +117,19 @@ async function recalcularTudo() {
     console.log("🥅 Pontos de artilheiro atualizados");
 
     // =========================
+    // 4.5️⃣ PONTOS DO PÓDIO
+    // =========================
+    await pool.query(`
+        UPDATE apostas_podio ap
+        SET pontos = 
+            (CASE WHEN ap.primeiro_lugar = c.podio_1 THEN 10 ELSE 0 END) +
+            (CASE WHEN ap.segundo_lugar = c.podio_2 THEN 10 ELSE 0 END) +
+            (CASE WHEN ap.terceiro_lugar = c.podio_3 THEN 10 ELSE 0 END)
+        FROM configuracoes c
+    `);
+    console.log("🏆 Pontos do pódio atualizados");
+
+    // =========================
     // 5️⃣ SOMAR TUDO NO USUÁRIO
     // =========================
 
@@ -126,6 +139,7 @@ async function recalcularTudo() {
         COALESCE(a.total,0) +
         COALESCE(j.total,0) +
         COALESCE(ar.total,0)
+        COALESCE(po.total, 0)
     FROM
     (
         SELECT usuario_id, SUM(pontos) AS total

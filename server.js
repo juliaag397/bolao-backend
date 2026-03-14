@@ -462,6 +462,31 @@ app.post("/calcular-pontos/:usuarioId", async (req, res) => {
 
     totalPontos += Number(pontosJogadores);
 
+    // ===== PONTOS DO PÓDIO (10 pts por acerto de posição) =====
+    const apostaPodioResult = await pool.query(
+        `SELECT primeiro_lugar, segundo_lugar, terceiro_lugar FROM apostas_podio WHERE usuario_id = $1`,
+        [usuarioId]
+    );
+
+    const podioOficialResult = await pool.query(
+        `SELECT podio_1, podio_2, podio_3 FROM configuracoes LIMIT 1`
+    );
+
+    if (apostaPodioResult.rows.length > 0 && podioOficialResult.rows.length > 0) {
+        const aposta = apostaPodioResult.rows[0];
+        const oficial = podioOficialResult.rows[0];
+
+        let pontosDoPodio = 0;
+        if (aposta.primeiro_lugar === oficial.podio_1) pontosDoPodio += 10;
+        if (aposta.segundo_lugar === oficial.podio_2) pontosDoPodio += 10;
+        if (aposta.terceiro_lugar === oficial.podio_3) pontosDoPodio += 10;
+
+        totalPontos += pontosDoPodio;
+        
+        // Opcional: salva o subtotal na tabela do pódio
+        await pool.query(`UPDATE apostas_podio SET pontos = $1 WHERE usuario_id = $2`, [pontosDoPodio, usuarioId]);
+    }
+
     // ===== ATUALIZA USUÁRIO =====
 
     await pool.query(
@@ -922,6 +947,16 @@ app.post("/salvar-podio", async (req, res) => {
   }
 
   try {
+
+    // 1. Verificar se o tempo expirou
+    const configResult = await pool.query("SELECT data_limite_podio FROM configuracoes LIMIT 1");
+    const dataLimite = new Date(configResult.rows[0].data_limite_podio);
+    const agora = new Date();
+
+    if (agora > dataLimite) {
+        return res.status(403).json({ erro: "As apostas do pódio já foram encerradas!" });
+    }
+
     await pool.query(
       `
       INSERT INTO apostas_podio (usuario_id, primeiro_lugar, segundo_lugar, terceiro_lugar)
