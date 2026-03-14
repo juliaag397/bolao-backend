@@ -909,32 +909,39 @@ app.get("/pontos-jogadores/:aposta_id", async (req, res) => {
 
   //PODIO
 app.post("/salvar-podio", async (req, res) => {
-    const { primeiro, segundo, terceiro } = req.body;
-    
-    // O id_usuario deve vir da sua sessão/cookie (req.user ou req.session)
-    const usuarioId = req.user?.id; 
+  // 1. Verificar autenticação conforme seu modelo
+  if (!req.session.usuario) {
+    return res.status(401).json({ erro: "Não autenticado" });
+  }
 
-    if (!usuarioId) {
-        return res.status(401).json({ erro: "Não autorizado" });
-    }
+  const usuario_id = req.session.usuario.id;
+  const { primeiro, segundo, terceiro } = req.body;
 
-    try {
-        const { data, error } = await supabase
-            .from('apostas_podio') 
-            .upsert({ 
-                usuario_id: usuarioId, 
-                primeiro_lugar: primeiro, 
-                segundo_lugar: segundo, 
-                terceiro_lugar: terceiro 
-            }, { onConflict: 'usuario_id' });
+  try {
+    // 2. Opcional: Verificar se o prazo do pódio expirou (se você tiver uma tabela de configurações)
+    // Se não tiver prazo, pode pular para o INSERT direto.
 
-        if (error) throw error;
+    // 3. Salvar usando ON CONFLICT para atualizar se já existir
+    await pool.query(
+      `
+      INSERT INTO apostas_podio (usuario_id, primeiro_lugar, segundo_lugar, terceir_lugar)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (usuario_id) 
+      DO UPDATE SET
+        primeiro_lugar = EXCLUDED.primeiro_lugar,
+        segundo_lugar = EXCLUDED.segundo_lugar,
+        terceiro_lugar = EXCLUDED.terceiro_lugar,
+        updated_at = NOW()
+      `,
+      [usuario_id, primeiro, segundo, terceiro]
+    );
 
-        return res.json({ mensagem: "Sucesso!" });
-    } catch (err) {
-        console.error(err);
-        return res.status(500).json({ erro: "Erro no banco de dados" });
-    }
+    res.json({ sucesso: true });
+
+  } catch (err) {
+    console.error("Erro no pódio:", err);
+    res.status(500).json({ erro: "Erro ao salvar pódio" });
+  }
 });
 
 app.listen(PORT, () => {
