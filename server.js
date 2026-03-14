@@ -917,6 +917,10 @@ app.post("/salvar-podio", async (req, res) => {
   const usuario_id = parseInt(req.session.usuario.id); 
   const { primeiro, segundo, terceiro } = req.body;
 
+  if (primeiro === segundo || primeiro === terceiro || segundo === terceiro) {
+    return res.status(400).json({ erro: "Você não pode escolher o mesmo país para posições diferentes." });
+  }
+
   try {
     await pool.query(
       `
