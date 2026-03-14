@@ -924,7 +924,7 @@ app.post("/salvar-podio", async (req, res) => {
     // 3. Salvar usando ON CONFLICT para atualizar se já existir
     await pool.query(
       `
-      INSERT INTO apostas_podio (usuario_id, primeiro_lugar, segundo_lugar, terceir_lugar)
+      INSERT INTO apostas_podio (usuario_id, primeiro_lugar, segundo_lugar, terceiro_lugar)
       VALUES ($1, $2, $3, $4)
       ON CONFLICT (usuario_id) 
       DO UPDATE SET
