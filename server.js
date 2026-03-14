@@ -909,19 +909,15 @@ app.get("/pontos-jogadores/:aposta_id", async (req, res) => {
 
   //PODIO
 app.post("/salvar-podio", async (req, res) => {
-  // 1. Verificar autenticação conforme seu modelo
   if (!req.session.usuario) {
     return res.status(401).json({ erro: "Não autenticado" });
   }
 
-  const usuario_id = req.session.usuario.id;
+  // Converte para número inteiro para garantir que o banco aceite
+  const usuario_id = parseInt(req.session.usuario.id); 
   const { primeiro, segundo, terceiro } = req.body;
 
   try {
-    // 2. Opcional: Verificar se o prazo do pódio expirou (se você tiver uma tabela de configurações)
-    // Se não tiver prazo, pode pular para o INSERT direto.
-
-    // 3. Salvar usando ON CONFLICT para atualizar se já existir
     await pool.query(
       `
       INSERT INTO apostas_podio (usuario_id, primeiro_lugar, segundo_lugar, terceiro_lugar)
@@ -937,10 +933,9 @@ app.post("/salvar-podio", async (req, res) => {
     );
 
     res.json({ sucesso: true });
-
   } catch (err) {
-    console.error("Erro no pódio:", err);
-    res.status(500).json({ erro: "Erro ao salvar pódio" });
+    console.error("Erro no pódio:", err.message);
+    res.status(500).json({ erro: "Erro ao salvar no banco" });
   }
 });
 
