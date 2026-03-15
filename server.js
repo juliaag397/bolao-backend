@@ -979,17 +979,38 @@ app.get("/obter-podio", async (req, res) => {
   const usuario_id = req.session.usuario.id;
 
   try {
-    const result = await pool.query(
+    // 1. Busca o palpite do usuário
+    const palpiteResult = await pool.query(
       "SELECT primeiro_lugar, segundo_lugar, terceiro_lugar FROM apostas_podio WHERE usuario_id = $1",
       [usuario_id]
     );
 
-    if (result.rows.length > 0) {
-      res.json(result.rows[0]);
+    // 2. Busca o resultado oficial
+    const oficialResult = await pool.query(
+      "SELECT podio_1, podio_2, podio_3 FROM configuracoes WHERE id = 1"
+    );
+
+    if (palpiteResult.rows.length > 0) {
+      const p = palpiteResult.rows[0];
+      const o = oficialResult.rows[0] || {}; // Evita erro se a tabela estiver vazia
+
+      // Função simples para comparar e dar 10 ou 0
+      const calcular = (palpite, oficial) => {
+        if (!oficial) return null; // Se não tem resultado oficial ainda, não mostra pontos
+        return palpite === oficial ? 10 : 0;
+      };
+
+      res.json({
+        ...p,
+        pts1: calcular(p.primeiro_lugar, o.podio_1),
+        pts2: calcular(p.segundo_lugar, o.podio_2),
+        pts3: calcular(p.terceiro_lugar, o.podio_3)
+      });
     } else {
-      res.json(null); // Usuário novo, sem apostas
+      res.json(null);
     }
   } catch (err) {
+    console.error(err);
     res.status(500).json({ erro: "Erro ao buscar pódio" });
   }
 });

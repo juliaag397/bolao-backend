@@ -134,35 +134,40 @@ async function recalcularTudo() {
     // =========================
 
     await pool.query(`
-    UPDATE usuarios u
-    SET pontos =
-        COALESCE(a.total,0) +
-        COALESCE(j.total,0) +
-        COALESCE(ar.total,0)
-        COALESCE(po.total, 0)
-    FROM
-    (
-        SELECT usuario_id, SUM(pontos) AS total
-        FROM apostas
-        GROUP BY usuario_id
-    ) a
-    LEFT JOIN
-    (
-        SELECT a.usuario_id, SUM(aj.pontos) AS total
-        FROM aposta_jogadores aj
-        JOIN apostas a ON a.id = aj.aposta_id
-        GROUP BY a.usuario_id
-    ) j ON j.usuario_id = a.usuario_id
-    LEFT JOIN
-    (
-        SELECT usuario_id, SUM(pontos) AS total
-        FROM aposta_artilheiro
-        GROUP BY usuario_id
-    ) ar ON ar.usuario_id = a.usuario_id
-    WHERE u.id = a.usuario_id
+    UPDATE usuarios
+    SET pontos = subquery.total_geral
+    FROM (
+        SELECT 
+            u.id AS user_id,
+            (
+                COALESCE(a.total, 0) + 
+                COALESCE(j.total, 0) + 
+                COALESCE(ar.total, 0) + 
+                COALESCE(po.total, 0)
+            ) AS total_geral
+        FROM usuarios u
+        LEFT JOIN (
+            SELECT usuario_id, SUM(pontos) AS total 
+            FROM apostas GROUP BY usuario_id
+        ) a ON a.usuario_id = u.id
+        LEFT JOIN (
+            SELECT a.usuario_id, SUM(aj.pontos) AS total 
+            FROM aposta_jogadores aj 
+            JOIN apostas a ON a.id = aj.aposta_id GROUP BY a.usuario_id
+        ) j ON j.usuario_id = u.id
+        LEFT JOIN (
+            SELECT usuario_id, SUM(pontos) AS total 
+            FROM aposta_artilheiro GROUP BY usuario_id
+        ) ar ON ar.usuario_id = u.id
+        LEFT JOIN (
+            SELECT usuario_id, pontos AS total 
+            FROM apostas_podio
+        ) po ON po.usuario_id = u.id
+    ) AS subquery
+    WHERE usuarios.id = subquery.user_id
     `);
 
-    console.log("🏆 Ranking atualizado");
+    console.log("🏆 Ranking atualizado com sucesso!");
 
     console.log("\n✅ RECÁLCULO COMPLETO FINALIZADO");
 
