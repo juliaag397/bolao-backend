@@ -323,20 +323,33 @@ app.get("/verificar-login", (req, res) => {
 
 });
 
+function obterMultiplicador(jogoId) {
+    if (jogoId >= 73 && jogoId <= 88) return 1.5; // Pré-Oitavas
+    if (jogoId >= 89 && jogoId <= 96) return 2.0; // Oitavas
+    if (jogoId >= 97 && jogoId <= 100) return 3.0; // Quartas
+    if (jogoId === 101 || jogoId === 102) return 4.0; // Semis
+    if (jogoId === 103 || jogoId === 104) return 5.0; // Finais
+    return 1.0; // Grupos
+}
 
+function determinarVencedorReal(jogo) {
+    if (jogo.gols_casa > jogo.gols_fora) return "casa";
+    if (jogo.gols_fora > jogo.gols_casa) return "fora";
+    // Se for empate, retorna o que estiver na coluna vencedor_penaltis
+    return jogo.vencedor_penaltis; 
+}
 
 // SALVAR OU ATUALIZAR A APOSTA
 app.post("/apostar", async (req, res) => {
-
   if (!req.session.usuario) {
     return res.status(401).json({ erro: "Não autenticado" });
   }
 
   const usuario_id = req.session.usuario.id;
-  const { jogo_id, gols_casa, gols_fora } = req.body;
+  // 1. Adicionamos o classificado_apostado aqui:
+  const { jogo_id, gols_casa, gols_fora, classificado_apostado } = req.body;
 
   try {
-
     // 🔎 Buscar data pelo ID
     const jogoResult = await pool.query(
       `SELECT data_jogo FROM jogos WHERE id = $1`,
@@ -356,17 +369,18 @@ app.post("/apostar", async (req, res) => {
       });
     }
 
-    // 🔥 Agora salva usando jogo_id
+    // 🔥 2. Agora salvamos incluindo a nova coluna
     await pool.query(
       `
-      INSERT INTO apostas (usuario_id, jogo_id, gols_casa, gols_fora)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO apostas (usuario_id, jogo_id, gols_casa, gols_fora, classificado_apostado)
+      VALUES ($1, $2, $3, $4, $5)
       ON CONFLICT (usuario_id, jogo_id)
       DO UPDATE SET
         gols_casa = EXCLUDED.gols_casa,
-        gols_fora = EXCLUDED.gols_fora
+        gols_fora = EXCLUDED.gols_fora,
+        classificado_apostado = EXCLUDED.classificado_apostado
       `,
-      [usuario_id, jogo_id, gols_casa, gols_fora]
+      [usuario_id, jogo_id, gols_casa, gols_fora, classificado_apostado]
     );
 
     res.json({ sucesso: true });
@@ -381,113 +395,69 @@ app.post("/calcular-pontos/:usuarioId", async (req, res) => {
   const { usuarioId } = req.params;
 
   try {
-
     const apostasResult = await pool.query(
       `SELECT * FROM apostas WHERE usuario_id = $1`,
       [usuarioId]
     );
 
     const apostas = apostasResult.rows;
-
     let totalPontos = 0;
 
     for (let aposta of apostas) {
-
+      // Importante: No seu SQL, certifique-se de buscar a tabela correta (jogos ou jogos_oficiais)
       const jogoOficialResult = await pool.query(
-        `SELECT * FROM jogos_oficiais WHERE jogo_id = $1`,
+        `SELECT * FROM jogos WHERE id = $1`, 
         [aposta.jogo_id]
       );
 
       if (jogoOficialResult.rows.length === 0) continue;
-
       const jogoOficial = jogoOficialResult.rows[0];
 
-      const pontos = calcularPontos(aposta, jogoOficial);
+      // --- INÍCIO DA NOVA LÓGICA DE CÁLCULO ---
+      let pontosBase = 0;
 
-      totalPontos += pontos;
+      // Cálculo clássico (10, 6, 4, 3)
+      if (aposta.gols_casa === jogoOficial.gols_casa && aposta.gols_fora === jogoOficial.gols_fora) {
+        pontosBase = 10;
+      } else {
+        const resAposta = aposta.gols_casa > aposta.gols_fora ? "casa" : aposta.gols_casa < aposta.gols_fora ? "fora" : "empate";
+        const resOficial = jogoOficial.gols_casa > jogoOficial.gols_fora ? "casa" : jogoOficial.gols_casa < jogoOficial.gols_fora ? "fora" : "empate";
+
+        if (resAposta === resOficial) {
+          if (resOficial === "empate") {
+            pontosBase = 3;
+          } else {
+            const diffAposta = Math.abs(aposta.gols_casa - aposta.gols_fora);
+            const diffOficial = Math.abs(jogoOficial.gols_casa - jogoOficial.gols_fora);
+            pontosBase = (diffAposta === diffOficial) ? 6 : 4;
+          }
+        }
+      }
+
+      // Aplica Multiplicador
+      const mult = obterMultiplicador(jogoOficial.id);
+      let pontosDoJogo = pontosBase * mult;
+
+      // Bônus de Classificado (Mata-Mata)
+      if (jogoOficial.id >= 73) {
+        const vencedorReal = determinarVencedorReal(jogoOficial);
+        // 'classificado_apostado' deve ser a coluna onde você salva a escolha do usuário
+        if (aposta.classificado_apostado === vencedorReal) {
+          pontosDoJogo += 3;
+        }
+      }
+      // --- FIM DA NOVA LÓGICA ---
+
+      totalPontos += pontosDoJogo;
 
       await pool.query(
-        `UPDATE apostas 
-         SET pontos = $1 
-         WHERE id = $2`,
-        [pontos, aposta.id]
+        `UPDATE apostas SET pontos = $1 WHERE id = $2`,
+        [pontosDoJogo, aposta.id]
       );
     }
 
-    // ===== ARTIHEIRO =====
-
-    const apostasArtilheiroResult = await pool.query(
-      `SELECT * FROM aposta_artilheiro WHERE usuario_id = $1`,
-      [usuarioId]
-    );
-
-    const artilheiroOficialResult = await pool.query(
-      `SELECT artilheiro_oficial FROM configuracoes LIMIT 1`
-    );
-
-    if (artilheiroOficialResult.rows.length > 0) {
-
-      const artilheiroOficial =
-        artilheiroOficialResult.rows[0].artilheiro_oficial;
-
-      for (let aposta of apostasArtilheiroResult.rows) {
-
-        if (aposta.jogador === artilheiroOficial) {
-
-          if (aposta.tipo === "inicial") totalPontos += 25;
-          if (aposta.tipo === "pos_grupos") totalPontos += 15;
-
-        }
-      }
-    }
-
-    // ===== PONTOS DOS JOGADORES =====
-
-    const pontosJogadoresResult = await pool.query(
-      `
-      SELECT SUM(aj.pontos) AS total
-      FROM aposta_jogadores aj
-      JOIN apostas a ON a.id = aj.aposta_id
-      WHERE a.usuario_id = $1
-      `,
-      [usuarioId]
-    );
-
-    const pontosJogadores = pontosJogadoresResult.rows[0].total || 0;
-
-    totalPontos += Number(pontosJogadores);
-
-    // ===== PONTOS DO PÓDIO (10 pts por acerto de posição) =====
-    const apostaPodioResult = await pool.query(
-        `SELECT primeiro_lugar, segundo_lugar, terceiro_lugar FROM apostas_podio WHERE usuario_id = $1`,
-        [usuarioId]
-    );
-
-    const podioOficialResult = await pool.query(
-        `SELECT podio_1, podio_2, podio_3 FROM configuracoes LIMIT 1`
-    );
-
-    if (apostaPodioResult.rows.length > 0 && podioOficialResult.rows.length > 0) {
-        const aposta = apostaPodioResult.rows[0];
-        const oficial = podioOficialResult.rows[0];
-
-        let pontosDoPodio = 0;
-        if (aposta.primeiro_lugar === oficial.podio_1) pontosDoPodio += 10;
-        if (aposta.segundo_lugar === oficial.podio_2) pontosDoPodio += 10;
-        if (aposta.terceiro_lugar === oficial.podio_3) pontosDoPodio += 10;
-
-        totalPontos += pontosDoPodio;
-        
-        // Opcional: salva o subtotal na tabela do pódio
-        await pool.query(`UPDATE apostas_podio SET pontos = $1 WHERE usuario_id = $2`, [pontosDoPodio, usuarioId]);
-    }
-
-    // ===== ATUALIZA USUÁRIO =====
-
-    await pool.query(
-      `UPDATE usuarios SET pontos = $1 WHERE id = $2`,
-      [totalPontos, usuarioId]
-    );
+    // ... (restante do código: Artilheiro, Jogadores, Pódio e Atualização Final do Usuário)
+    // Mantenha o restante como está, pois eles apenas somam ao totalPontos.
 
     res.json({ message: "Pontuação atualizada!", totalPontos });
 

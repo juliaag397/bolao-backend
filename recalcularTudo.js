@@ -1,6 +1,15 @@
 require("dotenv").config();
 const pool = require("./db");
 
+function obterMultiplicador(jogoId) {
+    if (jogoId >= 73 && jogoId <= 88) return 1.5; // Pré-Oitavas (32 avos)
+    if (jogoId >= 89 && jogoId <= 96) return 2.0; // Oitavas
+    if (jogoId >= 97 && jogoId <= 100) return 3.0; // Quartas
+    if (jogoId === 101 || jogoId === 102) return 4.0; // Semifinais
+    if (jogoId === 103 || jogoId === 104) return 5.0; // Final e 3º Lugar
+    return 1.0; // Grupos
+}
+
 async function recalcularTudo() {
 
   try {
@@ -33,17 +42,21 @@ async function recalcularTudo() {
 
     console.log("⚽ Pontos de jogadores atualizados");
 
+
     // =========================
-    // 3️⃣ PONTOS DOS PLACARES
+    // 3️⃣ PONTOS DOS PLACARES (Substitua esta parte)
     // =========================
 
     const apostas = await pool.query(`
     SELECT 
         a.id,
+        a.jogo_id,
         a.gols_casa,
         a.gols_fora,
+        a.classificado_apostado, -- Garanta que essa coluna existe na tabela apostas
         j.gols_casa AS oficial_casa,
-        j.gols_fora AS oficial_fora
+        j.gols_fora AS oficial_fora,
+        j.vencedor_penaltis AS vencedor_penaltis_oficial -- Garanta que essa coluna existe na tabela jogos
     FROM apostas a
     JOIN jogos j ON j.id = a.jogo_id
     WHERE j.gols_casa IS NOT NULL
@@ -51,52 +64,61 @@ async function recalcularTudo() {
     `);
 
     for (let aposta of apostas.rows) {
+        let pontosBase = 0;
+        let pontosExtras = 0;
 
-      let pontos = 0;
+        // 1. CÁLCULO DO PLACAR (Lógica de 10, 6, 4, 3)
+        if (aposta.gols_casa === aposta.oficial_casa && aposta.gols_fora === aposta.oficial_fora) {
+            pontosBase = 10;
+        } else {
+            const resAposta = aposta.gols_casa > aposta.gols_fora ? "casa" : aposta.gols_casa < aposta.gols_fora ? "fora" : "empate";
+            const resOficial = aposta.oficial_casa > aposta.oficial_fora ? "casa" : aposta.oficial_casa < aposta.oficial_fora ? "fora" : "empate";
 
-      if (
-        aposta.gols_casa === aposta.oficial_casa &&
-        aposta.gols_fora === aposta.oficial_fora
-      ) {
-        pontos = 10;
-      } else {
-
-        const resAposta =
-          aposta.gols_casa > aposta.gols_fora ? "casa" :
-          aposta.gols_casa < aposta.gols_fora ? "fora" :
-          "empate";
-
-        const resOficial =
-          aposta.oficial_casa > aposta.oficial_fora ? "casa" :
-          aposta.oficial_casa < aposta.oficial_fora ? "fora" :
-          "empate";
-
-        if (resAposta === resOficial) {
-
-          if (resOficial === "empate") {
-            pontos = 3;
-          } else {
-
-            const diffAposta = Math.abs(aposta.gols_casa - aposta.gols_fora);
-            const diffOficial = Math.abs(aposta.oficial_casa - aposta.oficial_fora);
-
-            if (diffAposta === diffOficial) {
-              pontos = 6;
-            } else {
-              pontos = 4;
+            if (resAposta === resOficial) {
+                if (resOficial === "empate") {
+                    pontosBase = 3;
+                } else {
+                    const diffAposta = Math.abs(aposta.gols_casa - aposta.gols_fora);
+                    const diffOficial = Math.abs(aposta.oficial_casa - aposta.oficial_fora);
+                    pontosBase = (diffAposta === diffOficial) ? 6 : 4;
+                }
             }
-          }
         }
-      }
 
-      await pool.query(`
-        UPDATE apostas
-        SET pontos = $1
-        WHERE id = $2
-      `, [pontos, aposta.id]);
+        // 2. APLICAR MULTIPLICADOR DO MATA-MATA
+        const multiplicador = obterMultiplicador(aposta.jogo_id);
+        let pontosFinaisPlacar = pontosBase * multiplicador;
+
+        // 3. PONTOS EXTRAS (CLASSIFICADO) - Apenas ID >= 73
+        if (aposta.jogo_id >= 73) {
+            let classificadoOficial = "";
+            if (aposta.oficial_casa > aposta.oficial_fora) {
+                classificadoOficial = "casa";
+            } else if (aposta.oficial_fora > aposta.oficial_casa) {
+                classificadoOficial = "fora";
+            } else {
+                // Se foi empate, usa a coluna do vencedor dos pênaltis
+                classificadoOficial = aposta.vencedor_penaltis_oficial; 
+            }
+
+            if (aposta.classificado_apostado === classificadoOficial) {
+                pontosExtras = 3;
+            }
+        }
+
+        const totalAposta = pontosFinaisPlacar + pontosExtras;
+
+        // Atualiza a tabela de apostas com o total (Placar * Mult + Extra)
+        await pool.query(`
+            UPDATE apostas
+            SET pontos = $1
+            WHERE id = $2
+        `, [totalAposta, aposta.id]);
     }
 
-    console.log("🎯 Pontos de placar atualizados");
+    console.log("🎯 Pontos de placar (com multiplicador e classificado) atualizados");
+
+    // ... (continua o código para artilheiro, pódio e soma total)
 
     // =========================
     // 4️⃣ PONTOS ARTILHEIRO
