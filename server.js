@@ -347,13 +347,12 @@ app.post("/apostar", async (req, res) => {
   }
 
   const usuario_id = req.session.usuario.id;
-  // 1. Adicionamos o classificado_apostado aqui:
   const { jogo_id, gols_casa, gols_fora, classificado_apostado } = req.body;
 
   try {
-    // 🔎 Buscar data pelo ID
+    // 🔎 1. Buscar data e a coluna 'jogo' (que tem o texto "Time A x Time B")
     const jogoResult = await pool.query(
-      `SELECT data_jogo FROM jogos WHERE id = $1`,
+      `SELECT data_jogo, jogo FROM jogos WHERE id = $1`,
       [jogo_id]
     );
 
@@ -370,7 +369,43 @@ app.post("/apostar", async (req, res) => {
       });
     }
 
-    // 🔥 2. Agora salvamos incluindo a nova coluna
+    // 🕵️‍♀️ 2. LÓGICA DO BRASIL: Verifica se o Brasil está na string do jogo
+    const nomeDoJogo = jogoResult.rows[0].jogo; // Ex: "Brasil x Haiti - 19/06"
+    
+    // Confere pelo texto se o Brasil é o mandante (antes do x) ou visitante (depois do x)
+    const isBrasilCasa = nomeDoJogo.includes("Brasil x");
+    const isBrasilFora = nomeDoJogo.includes("x Brasil");
+
+    let jogadoresApagados = false;
+    let novosGolsBrasil = null;
+
+    if (isBrasilCasa || isBrasilFora) {
+      novosGolsBrasil = isBrasilCasa ? gols_casa : gols_fora;
+
+      // Buscar a aposta atual antes de substituir
+      const apostaAntigaResult = await pool.query(
+        `SELECT id, gols_casa, gols_fora FROM apostas WHERE usuario_id = $1 AND jogo_id = $2`,
+        [usuario_id, jogo_id]
+      );
+
+      // Se a aposta já existia, vamos comparar os gols
+      if (apostaAntigaResult.rows.length > 0) {
+        const apostaAntiga = apostaAntigaResult.rows[0];
+        const aposta_id = apostaAntiga.id;
+        const golsBrasilAntigo = isBrasilCasa ? apostaAntiga.gols_casa : apostaAntiga.gols_fora;
+
+        // Se mudou a quantidade de gols do Brasil, apaga os jogadores
+        if (golsBrasilAntigo !== novosGolsBrasil) {
+          
+          // ✅ Correção: Usando o nome correto da sua tabela de jogadores
+          await pool.query(`DELETE FROM aposta_jogadores WHERE aposta_id = $1`, [aposta_id]);
+          
+          jogadoresApagados = true;
+        }
+      }
+    }
+
+    // 🔥 3. Agora salvamos a nova aposta normalmente
     await pool.query(
       `
       INSERT INTO apostas (usuario_id, jogo_id, gols_casa, gols_fora, classificado_apostado)
@@ -384,7 +419,12 @@ app.post("/apostar", async (req, res) => {
       [usuario_id, jogo_id, gols_casa, gols_fora, classificado_apostado]
     );
 
-    res.json({ sucesso: true });
+    // 📨 4. Devolvemos a resposta com as flags para o Frontend avisar o usuário
+    res.json({ 
+      sucesso: true,
+      jogadores_apagados: jogadoresApagados,
+      novos_gols_brasil: novosGolsBrasil
+    });
 
   } catch (err) {
     console.error(err);
