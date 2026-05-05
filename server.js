@@ -167,6 +167,7 @@ app.get("/apostas/:usuarioId", async (req, res) => {
         a.gols_casa,
         a.gols_fora,
         a.pontos,
+        a.classificado_apostado, 
         j.jogo,
         j.data_jogo
       FROM apostas a
