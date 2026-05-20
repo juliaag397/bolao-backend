@@ -22,7 +22,7 @@ app.set("trust proxy", 1);
 
 app.use(cors({
   origin: (origin, callback) => {
-
+    // Se não houver origin (como em testes locais ou ferramentas), permite o acesso
     if (!origin) return callback(null, true);
 
     if (
@@ -34,7 +34,8 @@ app.use(cors({
 
     callback(new Error("Not allowed by CORS"));
   },
-  credentials: true
+  // 1. Mude aqui de true para false para liberar os navegadores mais rígidos
+  credentials: false 
 }));
 
 app.use(express.json());
