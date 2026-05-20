@@ -645,14 +645,12 @@ app.post("/create-group", async (req, res) => {
 });
 
 app.get("/ranking-grupo/:groupId", async (req, res) => {
-
   const { groupId } = req.params;
 
   try {
-
     const result = await pool.query(
       `
-      SELECT u.nome, gm.score
+      SELECT u.nome, gm.score AS pontos 
       FROM group_members gm
       JOIN usuarios u ON u.id = gm.user_id
       WHERE gm.group_id = $1
@@ -667,7 +665,6 @@ app.get("/ranking-grupo/:groupId", async (req, res) => {
     console.error("Erro ao buscar ranking:", erro);
     res.status(500).json({ erro: "Erro no servidor" });
   }
-
 });
 
 app.post("/join-group", async (req, res) => {
