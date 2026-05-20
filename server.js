@@ -650,11 +650,11 @@ app.get("/ranking-grupo/:groupId", async (req, res) => {
   try {
     const result = await pool.query(
       `
-      SELECT u.nome, gm.score AS pontos 
+      SELECT u.nome, u.pontos 
       FROM group_members gm
       JOIN usuarios u ON u.id = gm.user_id
       WHERE gm.group_id = $1
-      ORDER BY gm.score DESC
+      ORDER BY u.pontos DESC
       `,
       [groupId]
     );
