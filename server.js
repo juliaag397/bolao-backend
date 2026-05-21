@@ -35,7 +35,7 @@ app.use(cors({
     callback(new Error("Not allowed by CORS"));
   },
   // 1. Mude aqui de true para false para liberar os navegadores mais rígidos
-  credentials: false 
+  credentials: true
 }));
 
 app.use(express.json());
@@ -57,7 +57,7 @@ app.use(session({
     secure: true,
     sameSite: "none",
     httpOnly: true,
-    maxAge: 1000 * 60 * 60 * 24 * 7
+    maxAge: 1000 * 60 * 60 * 24
   }
 }));
 
