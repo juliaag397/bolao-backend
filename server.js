@@ -332,12 +332,16 @@ app.post("/apostar", verificarToken, async (req, res) => {
 // ===============================
 // CALCULAR PONTOS
 // ===============================
+// ===============================
+// CALCULAR PONTOS
+// ===============================
 app.post("/calcular-pontos/:usuarioId", async (req, res) => {
   const { usuarioId } = req.params;
   try {
     const apostasResult = await pool.query(`SELECT * FROM apostas WHERE usuario_id = $1`, [usuarioId]);
     let totalPontos = 0;
 
+    // 1. Calcula pontos de cada jogo/placar
     for (let aposta of apostasResult.rows) {
       const jogoOficialResult = await pool.query(`SELECT * FROM jogos WHERE id = $1`, [aposta.jogo_id]);
       if (jogoOficialResult.rows.length === 0) continue;
@@ -373,7 +377,34 @@ app.post("/calcular-pontos/:usuarioId", async (req, res) => {
       await pool.query(`UPDATE apostas SET pontos = $1 WHERE id = $2`, [pontosDoJogo, aposta.id]);
     }
 
-    res.json({ message: "Pontuação updated!", totalPontos });
+    // 🚨 2. NOVO: CALCULAR PONTOS DO PÓDIO PARA ESTE USUÁRIO
+    const podioResult = await pool.query(`SELECT * FROM apostas_podio WHERE usuario_id = $1`, [usuarioId]);
+    const configResult = await pool.query(`SELECT * FROM configuracoes LIMIT 1`);
+
+    if (podioResult.rows.length > 0 && configResult.rows.length > 0) {
+      const ap = podioResult.rows[0];
+      const c = configResult.rows[0];
+      let pontosPodio = 0;
+
+      // Se acertou os 3 nas posições exatas -> 100 pontos
+      if (ap.primeiro_lugar === c.podio_1 && ap.segundo_lugar === c.podio_2 && ap.terceiro_lugar === c.podio_3) {
+        pontosPodio = 100;
+      } else {
+        // Caso contrário, soma individualmente
+        if (ap.primeiro_lugar === c.podio_1) pontosPodio += 40;
+        if (ap.segundo_lugar === c.podio_2) pontosPodio += 15;
+        if (ap.terceiro_lugar === c.podio_3) pontosPodio += 5;
+      }
+
+      totalPontos += pontosPodio;
+      // Atualiza os pontos do pódio do usuário no banco
+      await pool.query(`UPDATE apostas_podio SET pontos = $1 WHERE usuario_id = $2`, [pontosPodio, usuarioId]);
+    }
+
+    // Opcional: Se você quiser já salvar o total geral direto na tabela de usuários nesta rota:
+    await pool.query(`UPDATE usuarios SET pontos = $1 WHERE id = $2`, [totalPontos, usuarioId]);
+
+    res.json({ message: "Pontuação atualizada com sucesso!", totalPontos });
   } catch (error) {
     console.error(error);
     res.status(500).json({ erro: "Erro ao calcular pontos" });

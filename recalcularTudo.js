@@ -138,18 +138,25 @@ async function recalcularTudo() {
 
     console.log("🥅 Pontos de artilheiro atualizados");
 
-    // =========================
+// =========================
     // 4.5️⃣ PONTOS DO PÓDIO
     // =========================
     await pool.query(`
         UPDATE apostas_podio ap
-        SET pontos = 
-            (CASE WHEN ap.primeiro_lugar = c.podio_1 THEN 10 ELSE 0 END) +
-            (CASE WHEN ap.segundo_lugar = c.podio_2 THEN 10 ELSE 0 END) +
-            (CASE WHEN ap.terceiro_lugar = c.podio_3 THEN 10 ELSE 0 END)
+        SET pontos = CASE 
+            -- 🚨 SUPER BÔNUS: Se acertou os três nas posições exatas
+            WHEN ap.primeiro_lugar = c.podio_1 
+                 AND ap.segundo_lugar = c.podio_2 
+                 AND ap.terceiro_lugar = c.podio_3 THEN 100
+            ELSE 
+                -- Soma individual de cada acerto
+                (CASE WHEN ap.primeiro_lugar = c.podio_1 THEN 40 ELSE 0 END) +
+                (CASE WHEN ap.segundo_lugar = c.podio_2 THEN 15 ELSE 0 END) +
+                (CASE WHEN ap.terceiro_lugar = c.podio_3 THEN 5 ELSE 0 END)
+        END
         FROM configuracoes c
     `);
-    console.log("🏆 Pontos do pódio atualizados");
+    console.log("🏆 Pontos do pódio atualizados com as novas regras (40/15/5 ou 100)");
 
     // =========================
     // 5️⃣ SOMAR TUDO NO USUÁRIO
