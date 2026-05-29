@@ -329,9 +329,7 @@ app.post("/apostar", verificarToken, async (req, res) => {
   }
 });
 
-// ===============================
-// CALCULAR PONTOS
-// ===============================
+
 // ===============================
 // CALCULAR PONTOS
 // ===============================
@@ -795,16 +793,14 @@ app.post("/salvar-podio", verificarToken, async (req, res) => {
 });
 
 app.get("/obter-podio", verificarToken, async (req, res) => {
-  const usuario_id = req.usuarioId; // 🚨 Corrigido para JWT
+  const usuario_id = req.usuarioId; 
 
   try {
-    // 1. Busca o palpite do usuário
     const palpiteResult = await pool.query(
       "SELECT primeiro_lugar, segundo_lugar, terceiro_lugar FROM apostas_podio WHERE usuario_id = $1",
       [usuario_id]
     );
 
-    // 2. Busca o resultado oficial
     const oficialResult = await pool.query(
       "SELECT podio_1, podio_2, podio_3 FROM configuracoes WHERE id = 1"
     );
@@ -813,17 +809,38 @@ app.get("/obter-podio", verificarToken, async (req, res) => {
       const p = palpiteResult.rows[0];
       const o = oficialResult.rows[0] || {}; 
 
-      // Função simples para comparar e dar 10 ou 0
-      const calcular = (palpite, oficial) => {
-        if (!oficial) return null; 
-        return palpite === oficial ? 10 : 0;
-      };
+      let pts1 = 0;
+      let pts2 = 0;
+      let pts3 = 0;
+      let pontosTotais = 0;
+
+      // Se o resultado oficial do primeiro lugar já existir, calcula os pontos
+      if (o.podio_1 !== undefined && o.podio_1 !== null) {
+        const acertou1 = p.primeiro_lugar === o.podio_1;
+        const acertou2 = p.segundo_lugar === o.podio_2;
+        const acertou3 = p.terceiro_lugar === o.podio_3;
+
+        if (acertou1 && acertou2 && acertou3) {
+          pts1 = 40;
+          pts2 = 15;
+          pts3 = 5;
+          pontosTotais = 100; // 🏆 Gabaritou as 3 posições
+        } else {
+          pts1 = acertou1 ? 40 : 0;
+          pts2 = acertou2 ? 15 : 0;
+          pts3 = acertou3 ? 5 : 0;
+          pontosTotais = pts1 + pts2 + pts3; // 🎯 Soma parcial (ex: 40 + 15 = 55)
+        }
+      }
 
       res.json({
-        ...p,
-        pts1: calcular(p.primeiro_lugar, o.podio_1),
-        pts2: calcular(p.segundo_lugar, o.podio_2),
-        pts3: calcular(p.terceiro_lugar, o.podio_3)
+        primeiro_lugar: p.primeiro_lugar,
+        segundo_lugar: p.segundo_lugar,
+        terceiro_lugar: p.terceiro_lugar,
+        pts1: pts1,
+        pts2: pts2,
+        pts3: pts3,
+        pontos: pontosTotais
       });
     } else {
       res.json(null);
