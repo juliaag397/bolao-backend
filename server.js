@@ -13,60 +13,56 @@ pool.query("SELECT NOW()")
   });
 
 const express = require("express");
-
 const cors = require("cors");
-
 const app = express();
 
 app.set("trust proxy", 1);
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Se não houver origin (como em testes locais ou ferramentas), permite o acesso
     if (!origin) return callback(null, true);
-
     if (
       origin.includes("vercel.app") ||
       origin.includes("localhost")
     ) {
       return callback(null, true);
     }
-
     callback(new Error("Not allowed by CORS"));
   },
-  // 1. Mude aqui de true para false para liberar os navegadores mais rígidos
   credentials: true
 }));
 
 app.use(express.json());
 
-const session = require("express-session");
-const pgSession = require("connect-pg-simple")(session);
+// ===============================
+// CONFIGURAÇÃO DO JWT
+// ===============================
+const jwt = require("jsonwebtoken");
+const JWT_SECRET = "segredo-do-bolao-super-seguro-2026"; 
 
-app.use(session({
-  name: "bolao.sid",
-  store: new pgSession({
-    pool: pool,
-    tableName: "user_sessions"
-  }),
-  secret: "segredo-super-seguro",
-  resave: false,
-  saveUninitialized: false,
-  proxy: true,
-  cookie: {
-    secure: true,
-    sameSite: "none",
-    httpOnly: true,
-    maxAge: 1000 * 60 * 60 * 24
-  }
-}));
+// Middleware para proteger as rotas
+function verificarToken(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1]; 
 
+    if (!token) {
+        return res.status(401).json({ error: "Acesso negado. Faça login novamente." });
+    }
 
+    jwt.verify(token, JWT_SECRET, (err, payload) => {
+        if (err) {
+            return res.status(403).json({ error: "Sessão expirada. Faça login novamente." });
+        }
+        
+        req.usuarioId = payload.id; 
+        req.usuarioNome = payload.nome; // Salvamos o nome também caso precise
+        next(); 
+    });
+}
 
 // ===============================
 // ROTA PRINCIPAL
 // ===============================
-
 app.get("/", (req, res) => {
   res.send("Servidor do Bolão está rodando 🚀");
 });
@@ -74,26 +70,19 @@ app.get("/", (req, res) => {
 // ===============================
 // CADASTRO
 // ===============================
-
 app.post("/cadastro", async (req, res) => {
   const { nome, email, senha } = req.body;
-
   try {
     await pool.query(
       "INSERT INTO usuarios (nome, email, senha) VALUES ($1, $2, $3)",
       [nome, email, senha]
     );
-
     return res.json({ mensagem: "Cadastro realizado com sucesso!" });
-
   } catch (error) {
     console.error("Erro real:", error);
-
-    // 🔥 Se for email duplicado (PostgreSQL)
     if (error.code === "23505") {
       return res.status(400).json({ erro: "E-mail já cadastrado!" });
     }
-
     return res.status(500).json({ erro: "Erro no servidor" });
   }
 });
@@ -101,10 +90,8 @@ app.post("/cadastro", async (req, res) => {
 // ===============================
 // LOGIN
 // ===============================
-
 app.post("/login", async (req, res) => {
   const { email, senha } = req.body;
-
   try {
     const resultado = await pool.query(
       "SELECT * FROM usuarios WHERE email = $1",
@@ -121,142 +108,116 @@ app.post("/login", async (req, res) => {
       return res.json({ erro: "Senha incorreta!" });
     }
 
-    req.session.usuario = {
+    const token = jwt.sign(
+      { id: usuario.id, nome: usuario.nome }, 
+      JWT_SECRET, 
+      { expiresIn: "24h" } 
+    );
+
+    return res.json({
+      sucesso: true,
+      token: token, 
       id: usuario.id,
       nome: usuario.nome
-    };
-
-    req.session.save(() => {
-      res.json({
-        sucesso: true,
-        id: usuario.id,
-        nome: usuario.nome
-      });
-    })
-
-
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ erro: "Erro no servidor" });
   }
 });
 
-app.post("/logout", (req, res) => {
-    req.session.destroy(() => {
-        res.json({ mensagem: "Logout realizado" });
-    });
-});
-
 // ===============================
-
-const PORT = 3000;
+// LOGOUT
+// ===============================
+app.post("/logout", (req, res) => {
+    res.json({ mensagem: "Logout realizado" });
+});
 
 // ===============================
 // BUSCAR APOSTAS DO USUÁRIO
 // ===============================
-
 app.get("/apostas/:usuarioId", async (req, res) => {
   const { usuarioId } = req.params;
-
   try {
     const resultado = await pool.query(
       `
       SELECT 
-        a.id,
-        a.usuario_id,
-        a.jogo_id,
-        a.gols_casa,
-        a.gols_fora,
-        a.pontos,
-        a.classificado_apostado, 
-        j.jogo,
-        j.data_jogo
+        a.id, a.usuario_id, a.jogo_id, a.gols_casa, a.gols_fora, a.pontos, a.classificado_apostado, 
+        j.jogo, j.data_jogo
       FROM apostas a
       JOIN jogos j ON a.jogo_id = j.id
       WHERE a.usuario_id = $1
       `,
       [usuarioId]
     );
-
     res.json(resultado.rows);
-
   } catch (error) {
     console.error(error);
     res.status(500).json({ erro: "Erro ao buscar apostas" });
   }
 });
 
-// ARTILHEIRO
 // ===============================
-// SALVAR OU ATUALIZAR APOSTA ARTILHEIRO
+// ARTILHEIRO (ROTAS PROTEGIDAS COM JWT)
 // ===============================
 
-app.post("/salvar-artilheiro", async (req, res) => {
-
-  if (!req.session.usuario) {
-    return res.status(401).json({ erro: "Não autenticado" });
-  }
-
-  const usuario_id = req.session.usuario.id;
+app.post("/salvar-artilheiro", verificarToken, async (req, res) => {
+  const usuario_id = req.usuarioId; // 🚨 Corrigido para JWT
   const { tipo, jogador } = req.body;
 
   try {
-
     await pool.query(
       `
       INSERT INTO aposta_artilheiro (usuario_id, tipo, jogador)
       VALUES ($1, $2, $3)
       ON CONFLICT (usuario_id, tipo)
-      DO UPDATE SET
-        jogador = EXCLUDED.jogador
+      DO UPDATE SET jogador = EXCLUDED.jogador
       `,
       [usuario_id, tipo, jogador]
     );
-
     res.json({ sucesso: true });
-
   } catch (err) {
     console.error(err);
     res.status(500).json({ erro: "Erro ao salvar artilheiro" });
   }
-
 });
 
-// ===============================
-// BUSCAR APOSTAS ARTILHEIRO DO USUÁRIO
-// ===============================
-
-app.get("/artilheiros", async (req, res) => {
-
-  if (!req.session.usuario) {
-    return res.status(401).json({ erro: "Não autenticado" });
-  }
-
-  const usuario_id = req.session.usuario.id;
-
+app.get("/artilheiros", verificarToken, async (req, res) => {
+  const usuario_id = req.usuarioId; // 🚨 Corrigido para JWT
   try {
-
     const resultado = await pool.query(
       "SELECT * FROM aposta_artilheiro WHERE usuario_id = $1",
       [usuario_id]
     );
-
     res.json(resultado.rows);
-
   } catch (error) {
     console.error(error);
     res.status(500).json({ erro: "Erro ao buscar artilheiros" });
   }
-
 });
 
+app.get("/pontos-artilheiro", verificarToken, async (req, res) => {
+  const usuario_id = req.usuarioId; // 🚨 Corrigido para JWT
+  try {
+    const result = await pool.query(
+      `SELECT COALESCE(SUM(pontos),0) AS pontos FROM aposta_artilheiro WHERE usuario_id = $1`,
+      [usuario_id]
+    );
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ erro: "Erro ao buscar pontos do artilheiro" });
+  }
+});
+
+// ===============================
+// CONFIGURAÇÕES E RESULTADOS (PÚBLICOS)
+// ===============================
 app.get("/obter-configuracoes", async (_req, res) => {
   try {
-    // Buscamos todas as colunas importantes da tabela de configurações
     const result = await pool.query(
       `SELECT artilheiro_oficial, podio_1, podio_2, podio_3, data_limite_podio FROM configuracoes WHERE id = 1`
     );
-
     res.json(result.rows[0]);
   } catch (error) {
     console.error(error);
@@ -264,116 +225,69 @@ app.get("/obter-configuracoes", async (_req, res) => {
   }
 });
 
-app.get("/pontos-artilheiro", async (req, res) => {
-
-  if (!req.session.usuario) {
-    return res.status(401).json({ erro: "Não autenticado" });
-  }
-
-  const usuario_id = req.session.usuario.id;
-
-  try {
-
-    const result = await pool.query(
-      `SELECT COALESCE(SUM(pontos),0) AS pontos
-       FROM aposta_artilheiro
-       WHERE usuario_id = $1`,
-      [usuario_id]
-    );
-
-    res.json(result.rows[0]);
-
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ erro: "Erro ao buscar pontos do artilheiro" });
-  }
-
-});
-
 app.get("/resultado-artilheiro", async (req, res) => {
-
   try {
-
-    const result = await pool.query(
-      `SELECT artilheiro_oficial, gols_artilheiro
-       FROM configuracoes
-       LIMIT 1`
-    );
-
+    const result = await pool.query(`SELECT artilheiro_oficial, gols_artilheiro FROM configuracoes LIMIT 1`);
     res.json(result.rows[0]);
-
   } catch (error) {
-
     console.error(error);
     res.status(500).json({ erro: "Erro ao buscar resultado do artilheiro" });
-
   }
-
 });
 
+// ===============================
+// VERIFICAR LOGIN (ADAPTADO PARA JWT)
+// ===============================
 app.get("/verificar-login", (req, res) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1]; 
 
-    if (req.session.usuario) {
+    if (!token) return res.json({ logado: false });
+
+    jwt.verify(token, JWT_SECRET, (err, payload) => {
+        if (err) return res.json({ logado: false });
+        // Se o token for válido, responde com os dados para o frontend
         res.json({
             logado: true,
-            id: req.session.usuario.id,
-            nome: req.session.usuario.nome
+            id: payload.id,
+            nome: payload.nome
         });
-    } else {
-        res.json({ logado: false });
-    }
-
+    });
 });
 
-function obterMultiplicador(jogoId) {
-    if (jogoId >= 73 && jogoId <= 88) return 1.5; // Pré-Oitavas
-    if (jogoId >= 89 && jogoId <= 96) return 2.0; // Oitavas
-    if (jogoId >= 97 && jogoId <= 100) return 3.0; // Quartas
-    if (jogoId === 101 || jogoId === 102) return 4.0; // Semis
-    if (jogoId === 103 || jogoId === 104) return 5.0; // Finais
-    return 1.0; // Grupos
+// ===============================
+// FUNÇÕES AUXILIARES DE CÁLCULO
+// ===============================
+function obtenerMultiplicador(jogoId) {
+    if (jogoId >= 73 && jogoId <= 88) return 1.5; 
+    if (jogoId >= 89 && jogoId <= 96) return 2.0; 
+    if (jogoId >= 97 && jogoId <= 100) return 3.0; 
+    if (jogoId === 101 || jogoId === 102) return 4.0; 
+    if (jogoId === 103 || jogoId === 104) return 5.0; 
+    return 1.0; 
 }
 
 function determinarVencedorReal(jogo) {
     if (jogo.gols_casa > jogo.gols_fora) return "casa";
     if (jogo.gols_fora > jogo.gols_casa) return "fora";
-    // Se for empate, retorna o que estiver na coluna vencedor_penaltis
     return jogo.vencedor_penaltis; 
 }
 
+// ===============================
 // SALVAR OU ATUALIZAR A APOSTA
-app.post("/apostar", async (req, res) => {
-  if (!req.session.usuario) {
-    return res.status(401).json({ erro: "Não autenticado" });
-  }
-
-  const usuario_id = req.session.usuario.id;
+// ===============================
+app.post("/apostar", verificarToken, async (req, res) => {
+  const usuario_id = req.usuarioId;
   const { jogo_id, gols_casa, gols_fora, classificado_apostado } = req.body;
 
   try {
-    // 🔎 1. Buscar data e a coluna 'jogo' (que tem o texto "Time A x Time B")
-    const jogoResult = await pool.query(
-      `SELECT data_jogo, jogo FROM jogos WHERE id = $1`,
-      [jogo_id]
-    );
-
-    if (jogoResult.rows.length === 0) {
-      return res.status(404).json({ erro: "Jogo não encontrado" });
-    }
+    const jogoResult = await pool.query(`SELECT data_jogo, jogo FROM jogos WHERE id = $1`, [jogo_id]);
+    if (jogoResult.rows.length === 0) return res.status(404).json({ erro: "Jogo não encontrado" });
 
     const dataJogo = new Date(jogoResult.rows[0].data_jogo);
-    const agora = new Date();
+    if (new Date() >= dataJogo) return res.status(403).json({ erro: "Este jogo já começou." });
 
-    if (agora >= dataJogo) {
-      return res.status(403).json({
-        erro: "Este jogo já começou."
-      });
-    }
-
-    // 🕵️‍♀️ 2. LÓGICA DO BRASIL: Verifica se o Brasil está na string do jogo
-    const nomeDoJogo = jogoResult.rows[0].jogo; // Ex: "Brasil x Haiti - 19/06"
-    
-    // Confere pelo texto se o Brasil é o mandante (antes do x) ou visitante (depois do x)
+    const nomeDoJogo = jogoResult.rows[0].jogo; 
     const isBrasilCasa = nomeDoJogo.includes("Brasil x");
     const isBrasilFora = nomeDoJogo.includes("x Brasil");
 
@@ -382,181 +296,138 @@ app.post("/apostar", async (req, res) => {
 
     if (isBrasilCasa || isBrasilFora) {
       novosGolsBrasil = isBrasilCasa ? gols_casa : gols_fora;
-
-      // Buscar a aposta atual antes de substituir
       const apostaAntigaResult = await pool.query(
         `SELECT id, gols_casa, gols_fora FROM apostas WHERE usuario_id = $1 AND jogo_id = $2`,
         [usuario_id, jogo_id]
       );
 
-      // Se a aposta já existia, vamos comparar os gols
       if (apostaAntigaResult.rows.length > 0) {
         const apostaAntiga = apostaAntigaResult.rows[0];
-        const aposta_id = apostaAntiga.id;
         const golsBrasilAntigo = isBrasilCasa ? apostaAntiga.gols_casa : apostaAntiga.gols_fora;
 
-        // Se mudou a quantidade de gols do Brasil, apaga os jogadores
         if (golsBrasilAntigo !== novosGolsBrasil) {
-          
-          // ✅ Correção: Usando o nome correto da sua tabela de jogadores
-          await pool.query(`DELETE FROM aposta_jogadores WHERE aposta_id = $1`, [aposta_id]);
-          
+          await pool.query(`DELETE FROM aposta_jogadores WHERE aposta_id = $1`, [apostaAntiga.id]);
           jogadoresApagados = true;
         }
       }
     }
 
-    // 🔥 3. Agora salvamos a nova aposta normalmente
     await pool.query(
       `
       INSERT INTO apostas (usuario_id, jogo_id, gols_casa, gols_fora, classificado_apostado)
       VALUES ($1, $2, $3, $4, $5)
       ON CONFLICT (usuario_id, jogo_id)
-      DO UPDATE SET
-        gols_casa = EXCLUDED.gols_casa,
-        gols_fora = EXCLUDED.gols_fora,
-        classificado_apostado = EXCLUDED.classificado_apostado
+      DO UPDATE SET gols_casa = EXCLUDED.gols_casa, gols_fora = EXCLUDED.gols_fora, classificado_apostado = EXCLUDED.classificado_apostado
       `,
       [usuario_id, jogo_id, gols_casa, gols_fora, classificado_apostado]
     );
 
-    // 📨 4. Devolvemos a resposta com as flags para o Frontend avisar o usuário
-    res.json({ 
-      sucesso: true,
-      jogadores_apagados: jogadoresApagados,
-      novos_gols_brasil: novosGolsBrasil
-    });
-
+    res.json({ sucesso: true, jogadores_apagados: jogadoresApagados, novos_gols_brasil: novosGolsBrasil });
   } catch (err) {
     console.error(err);
     res.status(500).json({ erro: "Erro ao salvar aposta" });
   }
 });
 
+// ===============================
+// CALCULAR PONTOS
+// ===============================
 app.post("/calcular-pontos/:usuarioId", async (req, res) => {
   const { usuarioId } = req.params;
-
   try {
-    const apostasResult = await pool.query(
-      `SELECT * FROM apostas WHERE usuario_id = $1`,
-      [usuarioId]
-    );
-
-    const apostas = apostasResult.rows;
+    const apostasResult = await pool.query(`SELECT * FROM apostas WHERE usuario_id = $1`, [usuarioId]);
     let totalPontos = 0;
 
-    for (let aposta of apostas) {
-      // Importante: No seu SQL, certifique-se de buscar a tabela correta (jogos ou jogos_oficiais)
-      const jogoOficialResult = await pool.query(
-        `SELECT * FROM jogos WHERE id = $1`, 
-        [aposta.jogo_id]
-      );
-
+    for (let aposta of apostasResult.rows) {
+      const jogoOficialResult = await pool.query(`SELECT * FROM jogos WHERE id = $1`, [aposta.jogo_id]);
       if (jogoOficialResult.rows.length === 0) continue;
       const jogoOficial = jogoOficialResult.rows[0];
 
-      // --- INÍCIO DA NOVA LÓGICA DE CÁLCULO ---
-      let pontosBase = 0;
-
-      // Cálculo clássico (10, 6, 4, 3)
+      let pointsBase = 0;
       if (aposta.gols_casa === jogoOficial.gols_casa && aposta.gols_fora === jogoOficial.gols_fora) {
-        pontosBase = 10;
+        pointsBase = 10;
       } else {
         const resAposta = aposta.gols_casa > aposta.gols_fora ? "casa" : aposta.gols_casa < aposta.gols_fora ? "fora" : "empate";
         const resOficial = jogoOficial.gols_casa > jogoOficial.gols_fora ? "casa" : jogoOficial.gols_casa < jogoOficial.gols_fora ? "fora" : "empate";
 
         if (resAposta === resOficial) {
           if (resOficial === "empate") {
-            pontosBase = 3;
+            pointsBase = 3;
           } else {
             const diffAposta = Math.abs(aposta.gols_casa - aposta.gols_fora);
             const diffOficial = Math.abs(jogoOficial.gols_casa - jogoOficial.gols_fora);
-            pontosBase = (diffAposta === diffOficial) ? 6 : 4;
+            pointsBase = (diffAposta === diffOficial) ? 6 : 4;
           }
         }
       }
 
-      // Aplica Multiplicador
-      const mult = obterMultiplicador(jogoOficial.id);
-      let pontosDoJogo = pontosBase * mult;
+      const mult = obtenerMultiplicador(jogoOficial.id);
+      let pontosDoJogo = pointsBase * mult;
 
-      // Bônus de Classificado (Mata-Mata)
       if (jogoOficial.id >= 73) {
         const vencedorReal = determinarVencedorReal(jogoOficial);
-        // 'classificado_apostado' deve ser a coluna onde você salva a escolha do usuário
-        if (aposta.classificado_apostado === vencedorReal) {
-          pontosDoJogo += 3;
-        }
+        if (aposta.classificado_apostado === vencedorReal) pontosDoJogo += 3;
       }
-      // --- FIM DA NOVA LÓGICA ---
 
       totalPontos += pontosDoJogo;
-
-      await pool.query(
-        `UPDATE apostas SET pontos = $1 WHERE id = $2`,
-        [pontosDoJogo, aposta.id]
-      );
+      await pool.query(`UPDATE apostas SET pontos = $1 WHERE id = $2`, [pontosDoJogo, aposta.id]);
     }
 
-    // ... (restante do código: Artilheiro, Jogadores, Pódio e Atualização Final do Usuário)
-    // Mantenha o restante como está, pois eles apenas somam ao totalPontos.
-
-    res.json({ message: "Pontuação atualizada!", totalPontos });
-
+    res.json({ message: "Pontuação updated!", totalPontos });
   } catch (error) {
     console.error(error);
     res.status(500).json({ erro: "Erro ao calcular pontos" });
   }
 });
 
+// ===============================
+// RANKING
+// ===============================
 app.get("/ranking", async (req, res) => {
   try {
-
-    const resultado = await pool.query(
-      "SELECT nome, pontos FROM usuarios ORDER BY pontos DESC"
-    );
-
+    const resultado = await pool.query("SELECT nome, pontos FROM usuarios ORDER BY pontos DESC");
     res.json(resultado.rows);
-
   } catch (error) {
     console.error(error);
     res.status(500).json({ erro: "Erro ao buscar ranking" });
   }
 });
 
-  // PARA PEGAR A PONTUAÇÃO TOTAL DO BANCO
-app.get("/minha-pontuacao", async (req, res) => {
-
-  if (!req.session.usuario) {
-    return res.status(401).json({ erro: "Não autenticado" });
-  }
-
+// ===============================
+// MINHA PONTUAÇÃO (PROTEGIDA COM JWT)
+// ===============================
+app.get("/minha-pontuacao", verificarToken, async (req, res) => {
   try {
-    const result = await pool.query(
-      "SELECT pontos FROM usuarios WHERE id = $1",
-      [req.session.usuario.id]
-    );
-
+    const result = await pool.query("SELECT pontos FROM usuarios WHERE id = $1", [req.usuarioId]); // 🚨 Corrigido para JWT
     res.json({ pontos: result.rows[0].pontos });
-
   } catch (error) {
     console.error(error);
     res.status(500).json({ erro: "Erro ao buscar pontuação" });
   }
 });
 
+// ===============================
+// LISTAR JOGOS
+// ===============================
 app.get("/jogos", async (req, res) => {
   const result = await pool.query("SELECT * FROM jogos");
   res.json(result.rows);
 });
 
-  // grupos
+// Inicialização do servidor
+const PORT = 3000;
+app.listen(PORT, () => {
+  console.log(`Servidor rodando liso na porta ${PORT} 🚀`);
+});
+
+// ===============================
+// GRUPOS (ROTAS PROTEGIDAS COM JWT)
+// ===============================
 
 const crypto = require("crypto");
 
 async function gerarCodigoUnico() {
   while (true) {
-
     // gera código forte criptograficamente
     const code = crypto.randomBytes(4)
       .toString("base64")
@@ -575,40 +446,26 @@ async function gerarCodigoUnico() {
   }
 }
 
-app.post("/create-group", async (req, res) => {
-
-  if (!req.session.usuario) {
-    return res.status(401).json({ error: "Não autenticado" });
-  }
-
+app.post("/create-group", verificarToken, async (req, res) => {
   const { name, rules } = req.body;
-  const userId = req.session.usuario.id;
+  const userId = req.usuarioId; // 🚨 Corrigido para JWT
 
-  // 🚨 VALIDAÇÃO BACKEND (OBRIGATÓRIA)
+  // VALIDAÇÃO BACKEND (OBRIGATÓRIA)
   if (!name || name.trim() === "") {
-    return res.status(400).json({
-      error: "O nome do grupo é obrigatório."
-    });
+    return res.status(400).json({ error: "O nome do grupo é obrigatório." });
   }
-
   if (!rules || rules.trim() === "") {
-    return res.status(400).json({
-      error: "As regras do grupo são obrigatórias."
-    });
+    return res.status(400).json({ error: "As regras do grupo são obrigatórias." });
   }
-
   if (name.trim().length < 3) {
-    return res.status(400).json({
-      error: "O nome deve ter pelo menos 3 caracteres."
-    });
+    return res.status(400).json({ error: "O nome deve ter pelo menos 3 caracteres." });
   }
 
   try {
-
     const cleanName = name.trim();
     const cleanRules = rules.trim();
 
-    // 🔐 gerar código seguro
+    // gerar código seguro
     const code = await gerarCodigoUnico();
 
     // 1️⃣ Criar grupo
@@ -642,12 +499,10 @@ app.post("/create-group", async (req, res) => {
     console.error("Erro ao criar grupo:", erro);
     res.status(500).json({ error: "Erro no servidor" });
   }
-
 });
 
 app.get("/ranking-grupo/:groupId", async (req, res) => {
   const { groupId } = req.params;
-
   try {
     const result = await pool.query(
       `
@@ -659,26 +514,18 @@ app.get("/ranking-grupo/:groupId", async (req, res) => {
       `,
       [groupId]
     );
-
     res.json(result.rows);
-
   } catch (erro) {
     console.error("Erro ao buscar ranking:", erro);
     res.status(500).json({ erro: "Erro no servidor" });
   }
 });
 
-app.post("/join-group", async (req, res) => {
-
-  if (!req.session.usuario) {
-    return res.status(401).json({ erro: "Não autenticado" });
-  }
-
-  const usuario_id = req.session.usuario.id;
+app.post("/join-group", verificarToken, async (req, res) => {
+  const usuario_id = req.usuarioId; // 🚨 Corrigido para JWT
   const { code } = req.body;
 
   try {
-
     // 1️⃣ Buscar grupo pelo código
     const grupoResult = await pool.query(
       "SELECT id FROM groups WHERE code = $1",
@@ -707,19 +554,11 @@ app.post("/join-group", async (req, res) => {
     console.error("Erro ao entrar no grupo:", erro);
     res.status(500).json({ erro: "Erro no servidor" });
   }
-
 });
 
-app.get("/my-groups", async (req, res) => {
-
-  if (!req.session.usuario) {
-    return res.status(401).json({ erro: "Não autenticado" });
-  }
-
-  const usuario_id = req.session.usuario.id;
-
+app.get("/my-groups", verificarToken, async (req, res) => {
+  const usuario_id = req.usuarioId; // 🚨 Corrigido para JWT
   try {
-
     const result = await pool.query(
       `
       SELECT g.id, g.name, g.code, g.rules
@@ -729,22 +568,21 @@ app.get("/my-groups", async (req, res) => {
       `,
       [usuario_id]
     );
-
     res.json(result.rows);
-
   } catch (erro) {
     console.error("Erro ao buscar grupos:", erro);
     res.status(500).json({ erro: "Erro no servidor" });
   }
-
 });
 
-//ABA BRASIL
-app.post("/salvar-jogadores", async (req, res) => {
+// ===============================
+// ABA BRASIL (PROTEGIDA COM JWT)
+// ===============================
+
+app.post("/salvar-jogadores", verificarToken, async (req, res) => {
   const { aposta_id, jogadores } = req.body;
 
   try {
-
     // 1️⃣ Buscar aposta
     const apostaResult = await pool.query(
       `SELECT * FROM apostas WHERE id = $1`,
@@ -771,7 +609,6 @@ app.post("/salvar-jogadores", async (req, res) => {
 
     // 3️⃣ Descobrir gols do Brasil
     let golsBrasil;
-
     if (jogo.jogo.startsWith("Brasil")) {
       golsBrasil = aposta.gols_casa;
     } else {
@@ -780,9 +617,7 @@ app.post("/salvar-jogadores", async (req, res) => {
 
     // 4️⃣ Validar quantidade
     if (jogadores.length !== golsBrasil) {
-      return res.status(400).json({
-        erro: "Quantidade de jogadores inválida"
-      });
+      return res.status(400).json({ erro: "Quantidade de jogadores inválida" });
     }
 
     // 🔒 5️⃣ BLOQUEAR se jogo já começou
@@ -790,9 +625,7 @@ app.post("/salvar-jogadores", async (req, res) => {
     const dataJogo = new Date(jogo.data_jogo);
 
     if (agora.getTime() >= dataJogo.getTime()) {
-      return res.status(403).json({
-        erro: "Este jogo já começou. Não é possível alterar jogadores."
-      });
+      return res.status(403).json({ erro: "Este jogo já começou. Não é possível alterar jogadores." });
     }
 
     // 6️⃣ Apagar jogadores antigos
@@ -804,8 +637,7 @@ app.post("/salvar-jogadores", async (req, res) => {
     // 7️⃣ Inserir novos jogadores
     for (const jogador of jogadores) {
       await pool.query(
-        `INSERT INTO aposta_jogadores (aposta_id, jogador_nome)
-         VALUES ($1, $2)`,
+        `INSERT INTO aposta_jogadores (aposta_id, jogador_nome) VALUES ($1, $2)`,
         [aposta_id, jogador]
       );
     }
@@ -820,130 +652,80 @@ app.post("/salvar-jogadores", async (req, res) => {
 
 // ABA BRASIL - LISTAR JOGOS DO USUÁRIO
 app.get("/jogos-brasil/:usuarioId", async (req, res) => {
-
   const { usuarioId } = req.params;
-
   try {
-
     const resultado = await pool.query(`
       SELECT 
-        a.id,
-        a.jogo_id,
-        j.jogo,
-        j.data_jogo,
-        a.gols_casa,
-        a.gols_fora,
-
+        a.id, a.jogo_id, j.jogo, j.data_jogo, a.gols_casa, a.gols_fora,
         COALESCE(SUM(aj.pontos),0) AS pontos_jogadores,
-
         CASE 
           WHEN j.jogo LIKE 'Brasil x%' THEN a.gols_casa
           ELSE a.gols_fora
         END AS gols_brasil
-
       FROM apostas a
       JOIN jogos j ON j.id = a.jogo_id
-      LEFT JOIN aposta_jogadores aj
-        ON aj.aposta_id = a.id
-
-      WHERE a.usuario_id = $1
-      AND j.jogo ILIKE '%Brasil%'
-
-      GROUP BY 
-        a.id,
-        a.jogo_id,
-        j.jogo,
-        j.data_jogo,
-        a.gols_casa,
-        a.gols_fora
-
+      LEFT JOIN aposta_jogadores aj ON aj.aposta_id = a.id
+      WHERE a.usuario_id = $1 AND j.jogo ILIKE '%Brasil%'
+      GROUP BY a.id, a.jogo_id, j.jogo, j.data_jogo, a.gols_casa, a.gols_fora
       ORDER BY j.data_jogo
     `, [usuarioId]);
 
     res.json(resultado.rows);
-
   } catch (error) {
     console.error("ERRO /jogos-brasil:", error);
     res.status(500).json({ erro: "Erro ao buscar jogos do Brasil" });
   }
-
 });
 
 app.get("/jogadores/:aposta_id", async (req, res) => {
-
   const { aposta_id } = req.params;
-
   try {
-
     const result = await pool.query(
-      `SELECT jogador_nome
-       FROM aposta_jogadores
-       WHERE aposta_id = $1
-       ORDER BY id`,
+      `SELECT jogador_nome FROM aposta_jogadores WHERE aposta_id = $1 ORDER BY id`,
       [aposta_id]
     );
-
     res.json(result.rows);
-
   } catch (err) {
     console.error(err);
     res.status(500).json({ erro: "Erro ao buscar jogadores" });
   }
-
 });
 
 app.get("/gols-brasil/:jogo_id", async (req, res) => {
-
   const { jogo_id } = req.params;
-
   try {
-
     const result = await pool.query(
-      `SELECT jogador_nome
-       FROM gols_brasil
-       WHERE jogo_id = $1`,
+      `SELECT jogador_nome FROM gols_brasil WHERE jogo_id = $1`,
       [jogo_id]
     );
-
     res.json(result.rows);
-
   } catch (err) {
     console.error(err);
     res.status(500).json({ erro: "Erro ao buscar gols" });
   }
-
 });
 
 app.get("/pontos-jogadores/:aposta_id", async (req, res) => {
-
   const { aposta_id } = req.params;
-
   try {
-
     const result = await pool.query(
-      `SELECT COALESCE(SUM(pontos),0) AS pontos
-       FROM aposta_jogadores
-       WHERE aposta_id = $1`,
+      `SELECT COALESCE(SUM(pontos),0) AS pontos FROM aposta_jogadores WHERE aposta_id = $1`,
       [aposta_id]
     );
-
     res.json(result.rows[0]);
-
   } catch (err) {
     console.error(err);
     res.status(500).json({ erro: "Erro ao buscar pontos" });
   }
-
 });
 
-  //PODIO
-app.post("/salvar-podio", async (req, res) => {
-  if (!req.session.usuario) {
-    return res.status(401).json({ erro: "Não autenticado" });
-  }
+// ===============================
+// PÓDIO (ROTAS PROTEGIDAS COM JWT)
+// ===============================
 
+app.post("/salvar-podio", verificarToken, async (req, res) => {
   // Converte para número inteiro para garantir que o banco aceite
-  const usuario_id = parseInt(req.session.usuario.id); 
+  const usuario_id = parseInt(req.usuarioId); // 🚨 Corrigido para JWT
   const { primeiro, segundo, terceiro } = req.body;
 
   if (primeiro === segundo || primeiro === terceiro || segundo === terceiro) {
@@ -951,7 +733,6 @@ app.post("/salvar-podio", async (req, res) => {
   }
 
   try {
-
     // 1. Verificar se o tempo expirou
     const configResult = await pool.query("SELECT data_limite_podio FROM configuracoes LIMIT 1");
     const dataLimite = new Date(configResult.rows[0].data_limite_podio);
@@ -982,10 +763,8 @@ app.post("/salvar-podio", async (req, res) => {
   }
 });
 
-app.get("/obter-podio", async (req, res) => {
-  if (!req.session.usuario) return res.status(401).json({ erro: "Não autenticado" });
-
-  const usuario_id = req.session.usuario.id;
+app.get("/obter-podio", verificarToken, async (req, res) => {
+  const usuario_id = req.usuarioId; // 🚨 Corrigido para JWT
 
   try {
     // 1. Busca o palpite do usuário
@@ -1001,11 +780,11 @@ app.get("/obter-podio", async (req, res) => {
 
     if (palpiteResult.rows.length > 0) {
       const p = palpiteResult.rows[0];
-      const o = oficialResult.rows[0] || {}; // Evita erro se a tabela estiver vazia
+      const o = oficialResult.rows[0] || {}; 
 
       // Função simples para comparar e dar 10 ou 0
       const calcular = (palpite, oficial) => {
-        if (!oficial) return null; // Se não tem resultado oficial ainda, não mostra pontos
+        if (!oficial) return null; 
         return palpite === oficial ? 10 : 0;
       };
 
@@ -1022,8 +801,4 @@ app.get("/obter-podio", async (req, res) => {
     console.error(err);
     res.status(500).json({ erro: "Erro ao buscar pódio" });
   }
-});
-
-app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
 });
