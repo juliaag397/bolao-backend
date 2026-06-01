@@ -354,7 +354,7 @@ app.post("/calcular-pontos/:usuarioId", async (req, res) => {
 
         if (resAposta === resOficial) {
           if (resOficial === "empate") {
-            pointsBase = 3;
+            pointsBase = 5;
           } else {
             const diffAposta = Math.abs(aposta.gols_casa - aposta.gols_fora);
             const diffOficial = Math.abs(jogoOficial.gols_casa - jogoOficial.gols_fora);
@@ -363,7 +363,16 @@ app.post("/calcular-pontos/:usuarioId", async (req, res) => {
         }
       }
 
-      const mult = obtenerMultiplicador(jogoOficial.id);
+// Remova o "const mult..." que estava aqui em cima!
+      let mult = obtenerMultiplicador(jogoOficial.id);
+      
+      // 🚨 CORRIGIDO: Verifica se a palavra 'Brasil' existe dentro da coluna 'jogo' (Ex: "Brasil x Marrocos - 13/06")
+      const isBrasil = jogoOficial.jogo && jogoOficial.jogo.includes('Brasil');
+      
+      if (isBrasil) {
+          mult *= 2; 
+      }
+
       let pontosDoJogo = pointsBase * mult;
 
       if (jogoOficial.id >= 73) {

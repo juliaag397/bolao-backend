@@ -57,6 +57,7 @@ async function recalcularTudo() {
         j.gols_casa AS oficial_casa,
         j.gols_fora AS oficial_fora,
         j.vencedor_penaltis AS vencedor_penaltis_oficial -- Garanta que essa coluna existe na tabela jogos
+        j.jogo AS nome_do_jogo
     FROM apostas a
     JOIN jogos j ON j.id = a.jogo_id
     WHERE j.gols_casa IS NOT NULL
@@ -76,7 +77,7 @@ async function recalcularTudo() {
 
             if (resAposta === resOficial) {
                 if (resOficial === "empate") {
-                    pontosBase = 3;
+                    pontosBase = 5;
                 } else {
                     const diffAposta = Math.abs(aposta.gols_casa - aposta.gols_fora);
                     const diffOficial = Math.abs(aposta.oficial_casa - aposta.oficial_fora);
@@ -85,8 +86,16 @@ async function recalcularTudo() {
             }
         }
 
-        // 2. APLICAR MULTIPLICADOR DO MATA-MATA
-        const multiplicador = obterMultiplicador(aposta.jogo_id);
+        // 2. APLICAR MULTIPLICADOR DO MATA-MATA E DO BRASIL
+        let multiplicador = obterMultiplicador(aposta.jogo_id);
+        
+        // 🚨 CORRIGIDO: Checa se a string do jogo contém a palavra 'Brasil'
+        const isBrasil = aposta.nome_do_jogo && aposta.nome_do_jogo.includes('Brasil');
+        
+        if (isBrasil) {
+            multiplicador *= 2;
+        }
+
         let pontosFinaisPlacar = pontosBase * multiplicador;
 
         // 3. PONTOS EXTRAS (CLASSIFICADO) - Apenas ID >= 73
