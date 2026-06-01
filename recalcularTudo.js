@@ -56,7 +56,7 @@ async function recalcularTudo() {
         a.classificado_apostado, -- Garanta que essa coluna existe na tabela apostas
         j.gols_casa AS oficial_casa,
         j.gols_fora AS oficial_fora,
-        j.vencedor_penaltis AS vencedor_penaltis_oficial -- Garanta que essa coluna existe na tabela jogos
+        j.vencedor_penaltis AS vencedor_penaltis_oficial, -- Garanta que essa coluna existe na tabela jogos
         j.jogo AS nome_do_jogo
     FROM apostas a
     JOIN jogos j ON j.id = a.jogo_id
