@@ -421,14 +421,33 @@ app.post("/calcular-pontos/:usuarioId", async (req, res) => {
 // ===============================
 // RANKING
 // ===============================
+// Rota atualizada para puxar id e mostrar_nome
 app.get("/ranking", async (req, res) => {
   try {
-    const resultado = await pool.query("SELECT nome, pontos FROM usuarios ORDER BY pontos DESC");
+    const resultado = await pool.query(
+        "SELECT id, nome, pontos, mostrar_nome FROM usuarios ORDER BY pontos DESC"
+    );
     res.json(resultado.rows);
   } catch (error) {
     console.error(error);
     res.status(500).json({ erro: "Erro ao buscar ranking" });
   }
+});
+
+// 🚨 NOVA ROTA: Salva a preferência do usuário de mostrar ou não o nome
+app.put("/preferencia-ranking", verificarToken, async (req, res) => {
+    const { mostrar_nome, usuario_id } = req.body;
+    
+    try {
+        await pool.query(
+            "UPDATE usuarios SET mostrar_nome = $1 WHERE id = $2", 
+            [mostrar_nome, usuario_id]
+        );
+        res.json({ sucesso: true });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ erro: "Erro ao atualizar preferência" });
+    }
 });
 
 // ===============================
