@@ -653,8 +653,10 @@ app.post("/salvar-jogadores", verificarToken, async (req, res) => {
       golsBrasil = aposta.gols_fora;
     }
 
-    // 4️⃣ Validar quantidade
-    if (jogadores.length !== golsBrasil) {
+    // 4️⃣ Validar quantidade (🚨 CORRIGIDO: Limite máximo de 4 jogadores)
+    const quantidadePermitida = Math.min(golsBrasil, 4);
+
+    if (jogadores.length !== quantidadePermitida) {
       return res.status(400).json({ erro: "Quantidade de jogadores inválida" });
     }
 
