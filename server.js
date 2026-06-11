@@ -2,6 +2,8 @@ console.log("PGUSER:", process.env.PGUSER);
 console.log("PGHOST:", process.env.PGHOST);
 console.log("PGDATABASE:", process.env.PGDATABASE);
 
+const ExcelJS = require('exceljs');
+
 const pool = require("./db");
 
 pool.query("SELECT NOW()")
@@ -879,4 +881,95 @@ app.get("/obter-podio", verificarToken, async (req, res) => {
     console.error(err);
     res.status(500).json({ erro: "Erro ao buscar pódio" });
   }
+});
+
+// ROTA PARA BAIXAR A PLANILHA DE PALPITES POR FASE
+app.get('/baixar-planilha/:fase', async (req, res) => {
+    try {
+        const fase = req.params.fase;
+        let minId, maxId, nomePlanilha;
+
+        // Define o intervalo de IDs dependendo da fase solicitada
+        switch(fase) {
+            case 'rodada1': minId = 1; maxId = 24; nomePlanilha = "Rodada_1"; break;
+            case 'rodada2': minId = 25; maxId = 48; nomePlanilha = "Rodada_2"; break;
+            case 'rodada3': minId = 49; maxId = 72; nomePlanilha = "Rodada_3"; break;
+            case 'pre-oitavas': minId = 73; maxId = 88; nomePlanilha = "Pre_Oitavas"; break;
+            case 'oitavas': minId = 89; maxId = 96; nomePlanilha = "Oitavas"; break;
+            case 'quartas': minId = 97; maxId = 100; nomePlanilha = "Quartas"; break;
+            case 'semis': minId = 101; maxId = 102; nomePlanilha = "Semis"; break;
+            case 'finais': minId = 103; maxId = 104; nomePlanilha = "Terceiro_e_Final"; break;
+            default: return res.status(400).json({ erro: "Fase inválida." });
+        }
+
+        // 1. Busca os dados filtrando pelo jogo_id e ordenando pelo jogo
+        const { data, error } = await supabase
+            .from('apostas') 
+            .select(`
+                gols_casa,
+                gols_fora,
+                jogo_id,
+                usuarios (nome), 
+                jogos (time_casa, time_fora)
+            `)
+            .gte('jogo_id', minId) // gte = Greater Than or Equal (Maior ou igual)
+            .lte('jogo_id', maxId) // lte = Less Than or Equal (Menor ou igual)
+            .order('jogo_id', { ascending: true }); // Ordena do primeiro ao último jogo da fase
+
+        if (error) throw error;
+
+        if (!data || data.length === 0) {
+            return res.status(404).json({ erro: "Nenhuma aposta encontrada para esta fase." });
+        }
+
+        // 2. Cria a planilha em branco com o nome da fase
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet(nomePlanilha.replace('_', ' '));
+
+        // 3. Define as Colunas
+        worksheet.columns = [
+            { header: 'Participante', key: 'nome', width: 25 },
+            { header: 'Jogo', key: 'jogo', width: 35 },
+            { header: 'Palpite', key: 'palpite', width: 15 }
+        ];
+
+        // 4. Estiliza a primeira linha
+        worksheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        worksheet.getRow(1).fill = { 
+            type: 'pattern', 
+            pattern: 'solid', 
+            fgColor: { argb: 'FF00B050' }
+        };
+        worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+        // 5. Preenche as linhas
+        data.forEach(aposta => {
+            worksheet.addRow({
+                nome: aposta.usuarios.nome,
+                jogo: `${aposta.jogos.time_casa} x ${aposta.jogos.time_fora}`,
+                palpite: `${aposta.gols_casa} x ${aposta.gols_fora}`
+            });
+        });
+
+        // 6. Centraliza os palpites
+        worksheet.getColumn('palpite').alignment = { vertical: 'middle', horizontal: 'center' };
+
+        // 7. Prepara o envio do arquivo
+        res.setHeader(
+            'Content-Type', 
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        );
+        res.setHeader(
+            'Content-Disposition', 
+            `attachment; filename=palpites_${nomePlanilha}.xlsx`
+        );
+
+        // 8. Escreve e envia
+        await workbook.xlsx.write(res);
+        res.end();
+
+    } catch (erro) {
+        console.error("Erro ao gerar planilha:", erro);
+        res.status(500).json({ erro: "Falha ao gerar planilha" });
+    }
 });
