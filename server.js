@@ -902,23 +902,24 @@ app.get('/baixar-planilha/:fase', async (req, res) => {
             default: return res.status(400).json({ erro: "Fase inválida." });
         }
 
-        // 1. Busca os dados filtrando pelo jogo_id e ordenando pelo jogo
-        const { data, error } = await supabase
-            .from('apostas') 
-            .select(`
-                gols_casa,
-                gols_fora,
-                jogo_id,
-                usuarios (nome), 
-                jogos (time_casa, time_fora)
-            `)
-            .gte('jogo_id', minId) // gte = Greater Than or Equal (Maior ou igual)
-            .lte('jogo_id', maxId) // lte = Less Than or Equal (Menor ou igual)
-            .order('jogo_id', { ascending: true }); // Ordena do primeiro ao último jogo da fase
+        // 1. Busca os dados usando pool.query com INNER JOIN (Cruzando apostas, usuarios e jogos)
+        const querySQL = `
+            SELECT 
+                u.nome AS usuario_nome,
+                j.jogo AS partida,
+                a.gols_casa,
+                a.gols_fora
+            FROM apostas a
+            INNER JOIN usuarios u ON a.usuario_id = u.id
+            INNER JOIN jogos j ON a.jogo_id = j.id
+            WHERE a.jogo_id >= $1 AND a.jogo_id <= $2
+            ORDER BY a.jogo_id ASC
+        `;
 
-        if (error) throw error;
+        const resultado = await pool.query(querySQL, [minId, maxId]);
+        const apostas = resultado.rows; // Pega as linhas retornadas pelo PostgreSQL
 
-        if (!data || data.length === 0) {
+        if (!apostas || apostas.length === 0) {
             return res.status(404).json({ erro: "Nenhuma aposta encontrada para esta fase." });
         }
 
@@ -929,7 +930,7 @@ app.get('/baixar-planilha/:fase', async (req, res) => {
         // 3. Define as Colunas
         worksheet.columns = [
             { header: 'Participante', key: 'nome', width: 25 },
-            { header: 'Jogo', key: 'jogo', width: 35 },
+            { header: 'Jogo', key: 'jogo', width: 45 }, // Aumentado para 45 pois o texto da sua tabela é longo
             { header: 'Palpite', key: 'palpite', width: 15 }
         ];
 
@@ -942,11 +943,11 @@ app.get('/baixar-planilha/:fase', async (req, res) => {
         };
         worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
 
-        // 5. Preenche as linhas
-        data.forEach(aposta => {
+        // 5. Preenche as linhas usando as propriedades retornadas pelo SQL
+        apostas.forEach(aposta => {
             worksheet.addRow({
-                nome: aposta.usuarios.nome,
-                jogo: `${aposta.jogos.time_casa} x ${aposta.jogos.time_fora}`,
+                nome: aposta.usuario_nome,
+                jogo: aposta.partida, // Puxa o texto completo da coluna 'jogo' da sua tabela
                 palpite: `${aposta.gols_casa} x ${aposta.gols_fora}`
             });
         });
