@@ -913,6 +913,7 @@ app.get('/baixar-planilha/:fase', async (req, res) => {
             INNER JOIN usuarios u ON a.usuario_id = u.id
             INNER JOIN jogos j ON a.jogo_id = j.id
             WHERE a.jogo_id >= $1 AND a.jogo_id <= $2
+            AND j.data_jogo <= CURRENT_TIMESTAMP -- 🔥 REGRA ANTIFRAUDE: Só puxa se o jogo já começou!
             ORDER BY a.jogo_id ASC
         `;
 
