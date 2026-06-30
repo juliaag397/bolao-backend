@@ -333,7 +333,7 @@ app.post("/apostar", verificarToken, async (req, res) => {
 
 
 // ===============================
-// CALCULAR PONTOS
+// CALCULAR PONTOS (VERSÃO COMPLETA)
 // ===============================
 app.post("/calcular-pontos/:usuarioId", async (req, res) => {
   const { usuarioId } = req.params;
@@ -365,10 +365,7 @@ app.post("/calcular-pontos/:usuarioId", async (req, res) => {
         }
       }
 
-// Remova o "const mult..." que estava aqui em cima!
       let mult = obtenerMultiplicador(jogoOficial.id);
-      
-      // 🚨 CORRIGIDO: Verifica se a palavra 'Brasil' existe dentro da coluna 'jogo' (Ex: "Brasil x Marrocos - 13/06")
       const isBrasil = jogoOficial.jogo && jogoOficial.jogo.includes('Brasil');
       
       if (isBrasil) {
@@ -386,7 +383,7 @@ app.post("/calcular-pontos/:usuarioId", async (req, res) => {
       await pool.query(`UPDATE apostas SET pontos = $1 WHERE id = $2`, [pontosDoJogo, aposta.id]);
     }
 
-    // 🚨 2. NOVO: CALCULAR PONTOS DO PÓDIO PARA ESTE USUÁRIO
+    // 2. CALCULAR PONTOS DO PÓDIO
     const podioResult = await pool.query(`SELECT * FROM apostas_podio WHERE usuario_id = $1`, [usuarioId]);
     const configResult = await pool.query(`SELECT * FROM configuracoes LIMIT 1`);
 
@@ -395,22 +392,36 @@ app.post("/calcular-pontos/:usuarioId", async (req, res) => {
       const c = configResult.rows[0];
       let pontosPodio = 0;
 
-      // Se acertou os 3 nas posições exatas -> 100 pontos
       if (ap.primeiro_lugar === c.podio_1 && ap.segundo_lugar === c.podio_2 && ap.terceiro_lugar === c.podio_3) {
         pontosPodio = 100;
       } else {
-        // Caso contrário, soma individualmente
         if (ap.primeiro_lugar === c.podio_1) pontosPodio += 40;
         if (ap.segundo_lugar === c.podio_2) pontosPodio += 15;
         if (ap.terceiro_lugar === c.podio_3) pontosPodio += 5;
       }
 
       totalPontos += pontosPodio;
-      // Atualiza os pontos do pódio do usuário no banco
       await pool.query(`UPDATE apostas_podio SET pontos = $1 WHERE usuario_id = $2`, [pontosPodio, usuarioId]);
     }
 
-    // Opcional: Se você quiser já salvar o total geral direto na tabela de usuários nesta rota:
+    // 🚨 NOVO: BUSCAR E SOMAR OS PONTOS DA ABA BRASIL (JOGADORES)
+    const pontosJogadoresResult = await pool.query(`
+      SELECT COALESCE(SUM(aj.pontos), 0) AS total
+      FROM aposta_jogadores aj
+      JOIN apostas a ON a.id = aj.aposta_id
+      WHERE a.usuario_id = $1
+    `, [usuarioId]);
+    totalPontos += parseInt(pontosJogadoresResult.rows[0].total || 0);
+
+    // 🚨 NOVO: BUSCAR E SOMAR OS PONTOS DE ARTILHEIRO GERAL
+    const pontosArtilheiroResult = await pool.query(`
+      SELECT COALESCE(SUM(pontos), 0) AS total
+      FROM aposta_artilheiro
+      WHERE usuario_id = $1
+    `, [usuarioId]);
+    totalPontos += parseInt(pontosArtilheiroResult.rows[0].total || 0);
+
+    // Agora o total enviado para a tabela do usuário está 100% completo e correto!
     await pool.query(`UPDATE usuarios SET pontos = $1 WHERE id = $2`, [totalPontos, usuarioId]);
 
     res.json({ message: "Pontuação atualizada com sucesso!", totalPontos });

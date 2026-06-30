@@ -27,20 +27,32 @@ async function recalcularTudo() {
 
     console.log("🧹 Pontos zerados");
 
-    // =========================
-    // 2️⃣ PONTOS DOS JOGADORES
-    // =========================
+    // ==========================================
+    // 2️⃣ PONTOS DOS JOGADORES (CORRIGIDO 1-PARA-1)
+    // ==========================================
 
     await pool.query(`
+        WITH bet_ranked AS (
+            SELECT id, aposta_id, jogador_nome,
+                   ROW_NUMBER() OVER(PARTITION BY aposta_id, jogador_nome ORDER BY id) as rn
+            FROM aposta_jogadores
+        ),
+        gols_ranked AS (
+            SELECT jogo_id, jogador_nome,
+                   ROW_NUMBER() OVER(PARTITION BY jogo_id, jogador_nome ORDER BY (SELECT 1)) as rn
+            FROM gols_brasil
+        )
         UPDATE aposta_jogadores aj
         SET pontos = 3
-        FROM apostas a, gols_brasil g
-        WHERE aj.aposta_id = a.id
-        AND g.jogo_id = a.jogo_id
-        AND g.jogador_nome = aj.jogador_nome
+        FROM bet_ranked br
+        JOIN apostas a ON a.id = br.aposta_id
+        JOIN gols_ranked gr ON gr.jogo_id = a.jogo_id 
+                           AND gr.jogador_nome = br.jogador_nome 
+                           AND gr.rn = br.rn
+        WHERE aj.id = br.id
     `);
 
-    console.log("⚽ Pontos de jogadores atualizados");
+    console.log("⚽ Pontos de jogadores atualizados com correspondência exata de gols");
 
 
     // =========================
