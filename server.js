@@ -372,7 +372,8 @@ app.post("/calcular-pontos/:usuarioId", async (req, res) => {
           mult *= 2; 
       }
 
-      let pontosDoJogo = pointsBase * mult;
+      // Arredonda o valor para garantir que salve como inteiro no banco
+      let pontosDoJogo = Math.round(pointsBase * mult);
 
       if (jogoOficial.id >= 73) {
         const vencedorReal = determinarVencedorReal(jogoOficial);

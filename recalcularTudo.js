@@ -127,7 +127,8 @@ async function recalcularTudo() {
             }
         }
 
-        const totalAposta = pontosFinaisPlacar + pontosExtras;
+        // Arredonda para o inteiro mais próximo (ex: 7.5 vira 8)
+        const totalAposta = Math.round(pontosFinaisPlacar + pontosExtras);
 
         // Atualiza a tabela de apostas com o total (Placar * Mult + Extra)
         await pool.query(`
