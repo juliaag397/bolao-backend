@@ -55,92 +55,64 @@ async function recalcularTudo() {
     console.log("⚽ Pontos de jogadores atualizados com correspondência exata de gols");
 
 
-    // =========================
-    // 3️⃣ PONTOS DOS PLACARES (Substitua esta parte)
-    // =========================
+// ========================================================
+    // 3️⃣ PONTOS DOS PLACARES (SOMA EM MASSA - SEM LOOP)
+    // ========================================================
+    console.log("📊 Calculando pontos dos placares em massa...");
 
-    const apostas = await pool.query(`
-    SELECT 
-        a.id,
-        a.jogo_id,
-        a.gols_casa,
-        a.gols_fora,
-        a.classificado_apostado, -- Garanta que essa coluna existe na tabela apostas
-        j.gols_casa AS oficial_casa,
-        j.gols_fora AS oficial_fora,
-        j.vencedor_penaltis AS vencedor_penaltis_oficial, -- Garanta que essa coluna existe na tabela jogos
-        j.jogo AS nome_do_jogo
-    FROM apostas a
-    JOIN jogos j ON j.id = a.jogo_id
-    WHERE j.gols_casa IS NOT NULL
-    AND j.gols_fora IS NOT NULL
+    await pool.query(`
+        UPDATE apostas a
+        SET pontos = (
+            ROUND(
+                -- 1. Cálculo dos Pontos Base do Placar
+                (CASE 
+                    -- Placar Exato (10 pontos)
+                    WHEN a.gols_casa = j.gols_casa AND a.gols_fora = j.gols_fora THEN 10
+                    
+                    -- Acertou apenas o Resultado (Vencedor ou Empate)
+                    WHEN (a.gols_casa > a.gols_fora AND j.gols_casa > j.gols_fora)
+                      OR (a.gols_casa < a.gols_fora AND j.gols_casa < j.gols_fora)
+                      OR (a.gols_casa = a.gols_fora AND j.gols_casa = j.gols_fora)
+                    THEN
+                        CASE 
+                            WHEN j.gols_casa = j.gols_fora THEN 5 -- Acertou empate sem placar exato
+                            WHEN ABS(a.gols_casa - a.gols_fora) = ABS(j.gols_casa - j.gols_fora) THEN 6 -- Acertou a diferença de gols
+                            ELSE 4 -- Acertou só o vencedor
+                        END
+                    ELSE 0
+                END) * -- 2. Multiplicador da Fase do Jogo
+                (CASE 
+                    WHEN j.id BETWEEN 73 AND 88 THEN 1.5   -- Pré-Oitavas
+                    WHEN j.id BETWEEN 89 AND 96 THEN 2.0   -- Oitavas
+                    WHEN j.id BETWEEN 97 AND 100 THEN 3.0  -- Quartas
+                    WHEN j.id IN (101, 102) THEN 4.0       -- Semifinais
+                    WHEN j.id IN (103, 104) THEN 5.0       -- Final e 3º Lugar
+                    ELSE 1.0                               -- Grupos
+                END) *
+                
+                -- 3. Multiplicador de Jogos do Brasil (Dobro de pontos)
+                (CASE WHEN j.jogo LIKE '%Brasil%' THEN 2.0 ELSE 1.0 END)
+            )::INTEGER
+        ) + 
+        
+        -- 4. Pontos Extras de Classificação (Apenas para ID >= 73)
+        (CASE 
+            WHEN j.id >= 73 AND a.classificado_apostado = (
+                CASE 
+                    WHEN j.gols_casa > j.gols_fora THEN 'casa'
+                    WHEN j.gols_fora > j.gols_casa THEN 'fora'
+                    ELSE j.vencedor_penaltis
+                END
+            ) THEN 3
+            ELSE 0
+        END)
+        FROM jogos j
+        WHERE j.id = a.jogo_id
+          AND j.gols_casa IS NOT NULL
+          AND j.gols_fora IS NOT NULL;
     `);
 
-    for (let aposta of apostas.rows) {
-        let pontosBase = 0;
-        let pontosExtras = 0;
-
-        // 1. CÁLCULO DO PLACAR (Lógica de 10, 6, 4, 3)
-        if (aposta.gols_casa === aposta.oficial_casa && aposta.gols_fora === aposta.oficial_fora) {
-            pontosBase = 10;
-        } else {
-            const resAposta = aposta.gols_casa > aposta.gols_fora ? "casa" : aposta.gols_casa < aposta.gols_fora ? "fora" : "empate";
-            const resOficial = aposta.oficial_casa > aposta.oficial_fora ? "casa" : aposta.oficial_casa < aposta.oficial_fora ? "fora" : "empate";
-
-            if (resAposta === resOficial) {
-                if (resOficial === "empate") {
-                    pontosBase = 5;
-                } else {
-                    const diffAposta = Math.abs(aposta.gols_casa - aposta.gols_fora);
-                    const diffOficial = Math.abs(aposta.oficial_casa - aposta.oficial_fora);
-                    pontosBase = (diffAposta === diffOficial) ? 6 : 4;
-                }
-            }
-        }
-
-        // 2. APLICAR MULTIPLICADOR DO MATA-MATA E DO BRASIL
-        let multiplicador = obterMultiplicador(aposta.jogo_id);
-        
-        // 🚨 CORRIGIDO: Checa se a string do jogo contém a palavra 'Brasil'
-        const isBrasil = aposta.nome_do_jogo && aposta.nome_do_jogo.includes('Brasil');
-        
-        if (isBrasil) {
-            multiplicador *= 2;
-        }
-
-        let pontosFinaisPlacar = pontosBase * multiplicador;
-
-        // 3. PONTOS EXTRAS (CLASSIFICADO) - Apenas ID >= 73
-        if (aposta.jogo_id >= 73) {
-            let classificadoOficial = "";
-            if (aposta.oficial_casa > aposta.oficial_fora) {
-                classificadoOficial = "casa";
-            } else if (aposta.oficial_fora > aposta.oficial_casa) {
-                classificadoOficial = "fora";
-            } else {
-                // Se foi empate, usa a coluna do vencedor dos pênaltis
-                classificadoOficial = aposta.vencedor_penaltis_oficial; 
-            }
-
-            if (aposta.classificado_apostado === classificadoOficial) {
-                pontosExtras = 3;
-            }
-        }
-
-        // Arredonda para o inteiro mais próximo (ex: 7.5 vira 8)
-        const totalAposta = Math.round(pontosFinaisPlacar + pontosExtras);
-
-        // Atualiza a tabela de apostas com o total (Placar * Mult + Extra)
-        await pool.query(`
-            UPDATE apostas
-            SET pontos = $1
-            WHERE id = $2
-        `, [totalAposta, aposta.id]);
-    }
-
-    console.log("🎯 Pontos de placar (com multiplicador e classificado) atualizados");
-
-    // ... (continua o código para artilheiro, pódio e soma total)
+    console.log("🎯 Pontos de placar (com multiplicador e classificado) atualizados com sucesso!");
 
     // =========================
     // 4️⃣ PONTOS ARTILHEIRO
